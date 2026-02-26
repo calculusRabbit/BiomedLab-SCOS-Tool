@@ -157,6 +157,7 @@ class SCOS_UI:
                         dpg.add_plot_axis(dpg.mvXAxis, no_tick_labels=True, no_gridlines=True)
                         dpg.add_plot_axis(dpg.mvYAxis, no_tick_labels=True, no_gridlines=True,
                                           tag=self.HEAT_Y_AXIS_TAG[i])
+                    dpg.bind_colormap(bar, dpg.mvPlotColormap_Jet)
 
     # Device and Study panel
     def _device_study_panel(self, layout: Layout):
