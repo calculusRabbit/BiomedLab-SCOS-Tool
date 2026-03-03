@@ -6,7 +6,7 @@ from dataclasses import dataclass
 PADDING = 8
 ITEM_SPACING = 6
 
-TEXTURE_W, TEXTURE_H = 320, 240
+TEXTURE_W, TEXTURE_H = 640, 480
 
 HEAT_BARS = ["K²_raw", "K²_1", "K²_2", "K²_3", "K²_4", "K²_5"]
 PLOT_LABELS = ["K²", "BFI", "CC", "OD"]
@@ -55,9 +55,11 @@ class SCOS_UI:
     # Tags for heat bars and plots
     HEAT_BARS_TAG = ["k_raw", "k_1", "k_2", "k_3", "k_4", "k_5"]
     HEAT_Y_AXIS_TAG = ["k_raw/y", "k_1/y", "k_2/y", "k_3/y", "k_4/y", "k_5/y"]
+    HEAT_SERIES_TAG = ["k_raw/s", "k_1/s", "k_2/s", "k_3/s", "k_4/s", "k_5/s"]
 
     PLOT_SERIES_TAG = ["K2", "BFI", "CC", "OD"]
     PLOT_Y_AXIS_TAG = ["K2/y", "BFI/y", "CC/y", "OD/y"]
+    PLOT_SERIES_DATA = ["K2/s", "BFI/s", "CC/s", "OD/s"]
 
     ROI_BUTTONS = [
         ("Preview", BTN_PREVIEW),
