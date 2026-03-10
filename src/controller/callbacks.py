@@ -1,137 +1,163 @@
+# Controller — glue between model (camera + processor) and view (UI).
+
 import threading
+import time
+from collections import deque
 import queue
+
 import dearpygui.dearpygui as dpg
 import numpy as np
 
 from view.ui import SCOS_UI, TEXTURE_W, TEXTURE_H
-from model.testModel import TestModel
+from model.scos_result import SCOSResult
+from model.processor import process_all_data
 
 
 class SCOSController:
 
-    def __init__(self, ui: SCOS_UI):
-        self.ui    = ui
-        self.model = TestModel(width=TEXTURE_W, height=TEXTURE_H)
+    def __init__(self, ui: SCOS_UI, camera):
+        self.ui = ui
+        self.camera = camera
 
+        # threading
         self._running = False
         self._thread = None
-        self._result_queue = queue.Queue(maxsize=1)
+        self._queue = queue.Queue(maxsize=1)
+
+        self._timestamp = 0.0
+
+        # plot history buffers
+        self._max_points = 500
+        self._time_buf = deque(maxlen=self._max_points)
+        self._k2_buf  = deque(maxlen=self._max_points)
+        self._bfi_buf = deque(maxlen=self._max_points)
+        self._cc_buf  = deque(maxlen=self._max_points)
+        self._od_buf  = deque(maxlen=self._max_points)
+
+        # resize tracking
         self._last_size = (0, 0)
 
-        # plot buffers
-        self._max_points = 500
-        self._start_time = None
-        self._plot_x     = []
-        self._plot_y     = {"K2": [], "BFI": [], "CC": [], "OD": []}
-
-        # track if series have been created yet
-        self._plots_initialized = False
-        self._heat_bars_initialized = False
 
 
-    # Callback setup
     def setup_callbacks(self):
         dpg.set_item_callback(self.ui.BTN_PREVIEW, self._on_preview)
+        dpg.set_item_callback(self.ui.BTN_STOP, self._on_stop)
+        dpg.set_item_callback(self.ui.INPUT_AUTOSCALE, self._on_autoFit)
 
-    
-    # Button callbacks 
+
+    def update_UI(self):
+        self._handle_resize()
+        self._drain_queue()
+
+
+    # button callbacks
+    def _on_autoFit(self):
+        # auto fit y axis
+        for plot_tag in self.ui.GRAPH_TAG:
+            dpg.fit_axis_data(dpg.get_item_children(plot_tag, 1)[1])  # y-axis is second child
+
+
     def _on_preview(self):
-        if self._running == True:
+        self._start_acquisition()
+
+
+    def _on_stop(self):
+        self._stop_acquisition()
+        self._clear_buffers()
+
+
+    # acquisition (start / stop / worker thread)
+    def _start_acquisition(self):
+        if self._running:
             return
+        self.camera.open()
         self._running = True
         self._thread = threading.Thread(target=self._worker, daemon=True)
         self._thread.start()
 
 
-    # Worker thread 
+    def _stop_acquisition(self):
+        self._running = False
+        if self._thread:
+            self._thread.join(timeout=2.0)
+            self._thread = None
+        self.camera.close()
+
+
     def _worker(self):
-        self.model.start()
+        start = time.time()
         while self._running:
-            result = self.model.get_result()
-            if result is None:
+            frame = self.camera.grab_frame()
+            if frame is None:
                 continue
+
+            self.timestamp = time.time() - start
+            result = process_all_data(frame)
+
             try:
-                self._result_queue.put_nowait(result)
+                self._queue.put_nowait(result)
             except queue.Full:
                 pass
 
-    # Main thread update 
-    def update(self):
+
+    # UI updates (main thread only)
+
+    def _drain_queue(self):
         try:
-            result = self._result_queue.get_nowait()
-            self._update_camera(result)
-            self._update_heat_bars(result)
-            #self._update_plots(result)
+            result = self._queue.get_nowait()
         except queue.Empty:
-            pass
-
-
-    def _update_camera(self, result):
-        if result.frame is not None:
-            dpg.set_value(self.ui.LIVE_TEXTURE, result.frame)
-
-
-    def _update_heat_bars(self, result):
-        # check output from backend
-        if result.heat_maps is None:
             return
-
-        # update 6 of heat bar on top left panel
-        for i, heat_map in enumerate(result.heat_maps):
-            heat_map = np.array(heat_map)
-            data = heat_map.flatten().tolist()
-            if not dpg.does_item_exist(self.ui.HEAT_SERIES_TAG[i]):
-                rows, cols = heat_map.shape
-                dpg.add_heat_series(x=data, rows=rows, cols=cols, format="", 
-                                    parent=self.ui.HEAT_Y_AXIS_TAG[i], tag=self.ui.HEAT_SERIES_TAG[i])
-            else:
-                dpg.set_value(self.ui.HEAT_SERIES_TAG[i], [data])
+        self._update_frame(result)
+        self._update_plots(result)
 
 
+    def _update_frame(self, result: SCOSResult):
+        frame = result.frame
+        h, w = frame.shape[:2]
 
-    def _update_plots(self, result):
-        if self._start_time is None:
-            self._start_time = result.time
+        if h != TEXTURE_H or w != TEXTURE_W:
+            import cv2
+            frame = cv2.resize(frame, (TEXTURE_W, TEXTURE_H))
 
-        t = result.time - self._start_time
-
-        self._plot_x.append(t)
-        self._plot_y["K2"].append(result.k2)
-        self._plot_y["BFI"].append(result.bfi)
-        self._plot_y["CC"].append(result.cc)
-        self._plot_y["OD"].append(result.od)
-
-        # rolling window
-        if len(self._plot_x) > self._max_points:
-            self._plot_x = self._plot_x[-self._max_points:]
-            for key in self._plot_y:
-                self._plot_y[key] = self._plot_y[key][-self._max_points:]
-
-        if not self._plots_initialized:
-            # create series once on first frame
-            for tag, y_axis_tag in zip(SCOS_UI.PLOT_SERIES_TAG, SCOS_UI.PLOT_Y_AXIS_TAG):
-                dpg.add_line_series(
-                    x      = self._plot_x,
-                    y      = self._plot_y[tag],
-                    label  = tag,
-                    parent = y_axis_tag,
-                    tag    = tag + "_series"
-                )
-            self._plots_initialized = True
-            return
-
-        # already created — just update data
-        for tag in SCOS_UI.PLOT_SERIES_TAG:
-            dpg.set_value(tag + "_series", [self._plot_x, self._plot_y[tag]])
+        norm = frame.astype(np.float32) / 255.0
+        rgb = np.stack([norm, norm, norm], axis=-1).flatten()
+        dpg.set_value(self.ui.LIVE_TEXTURE, rgb)
 
 
+    def _update_plots(self, result: SCOSResult):
+        self._time_buf.append(self.timestamp)
+        self._k2_buf.append(result.k2)
+        self._bfi_buf.append(result.bfi)
+        self._cc_buf.append(result.cc)
+        self._od_buf.append(result.od)
 
+        t = list(self._time_buf)
+        bufs = [self._k2_buf, self._bfi_buf, self._cc_buf, self._od_buf]
+
+        for i, buf in enumerate(bufs):
+            dpg.set_value(self.ui.PLOT_SERIES_TAG[i], [t, list(buf)])
+
+        if t:
+            window = 10.0
+            x_max = max(window, t[-1]) + 0.5
+            x_min = x_max - window
+            for x_tag in self.ui.GRAPH_X_TAG:
+                dpg.set_axis_limits(x_tag, x_min, x_max)
+
+
+    def _clear_buffers(self):
+        self._time_buf.clear()
+        self._k2_buf.clear()
+        self._bfi_buf.clear()
+        self._cc_buf.clear()
+        self._od_buf.clear()
 
 
     # resize
-    def on_resize(self):
+
+    def _handle_resize(self):
         w = dpg.get_viewport_client_width()
         h = dpg.get_viewport_client_height()
-        if (w, h) != self._last_size:
+        if (w, h) != self._last_size and w > 0 and h > 0:
             self._last_size = (w, h)
             self.ui.resize(w, h)

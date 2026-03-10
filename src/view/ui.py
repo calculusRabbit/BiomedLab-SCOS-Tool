@@ -6,7 +6,7 @@ from dataclasses import dataclass
 PADDING = 8
 ITEM_SPACING = 6
 
-TEXTURE_W, TEXTURE_H = 640, 480
+TEXTURE_W, TEXTURE_H = 1920, 1200
 
 HEAT_BARS = ["K²_raw", "K²_1", "K²_2", "K²_3", "K²_4", "K²_5"]
 PLOT_LABELS = ["K²", "BFI", "CC", "OD"]
@@ -51,15 +51,18 @@ class SCOS_UI:
     BTN_PAUSE = "btn_pause"
     BTN_STOP = "btn_stop"
 
+    #
+    INPUT_AUTOSCALE = "inp_autoscale"
+
 
     # Tags for heat bars and plots
     HEAT_BARS_TAG = ["k_raw", "k_1", "k_2", "k_3", "k_4", "k_5"]
     HEAT_Y_AXIS_TAG = ["k_raw/y", "k_1/y", "k_2/y", "k_3/y", "k_4/y", "k_5/y"]
     HEAT_SERIES_TAG = ["k_raw/s", "k_1/s", "k_2/s", "k_3/s", "k_4/s", "k_5/s"]
 
-    PLOT_SERIES_TAG = ["K2", "BFI", "CC", "OD"]
-    PLOT_Y_AXIS_TAG = ["K2/y", "BFI/y", "CC/y", "OD/y"]
-    PLOT_SERIES_DATA = ["K2/s", "BFI/s", "CC/s", "OD/s"]
+    GRAPH_TAG = ["K2", "BFI", "CC", "OD"]
+    GRAPH_X_TAG = ["K2_x", "BFI_x", "CC_x", "OD_x"]
+    PLOT_SERIES_TAG = ["K2_series", "BFI_series", "CC_series", "OD_series"]
 
     ROI_BUTTONS = [
         ("Preview", BTN_PREVIEW),
@@ -135,7 +138,7 @@ class SCOS_UI:
 
         for bar in self.HEAT_BARS_TAG:
             dpg.configure_item(bar, width=layout.heat_bar_w)
-        for plot in self.PLOT_SERIES_TAG:
+        for plot in self.GRAPH_TAG:
             dpg.configure_item(plot, height=layout.plot_h)
 
     # LEFT COLUMN
@@ -237,11 +240,13 @@ class SCOS_UI:
                 dpg.add_button(label="Connect")
                 dpg.add_text("Time scale:")
                 dpg.add_input_int(default_value=0, width=100)
-                dpg.add_checkbox(label="Autoscale")
+                dpg.add_checkbox(label="Autoscale", tag=self.INPUT_AUTOSCALE)
 
     # Plot panel
     def _plots_panel(self, layout: Layout):
-        for i, plot in enumerate(self.PLOT_SERIES_TAG):
+        for i, plot in enumerate(self.GRAPH_TAG):
             with dpg.plot(tag=plot, label=plot, height=layout.plot_h, width=-1, no_mouse_pos=True):
-                dpg.add_plot_axis(dpg.mvXAxis, label="s", no_gridlines=True)
-                dpg.add_plot_axis(dpg.mvYAxis, label=plot, tag=self.PLOT_Y_AXIS_TAG[i], no_gridlines=True)
+                dpg.add_plot_axis(dpg.mvXAxis, label="time (s)", no_gridlines=True, tag=self.GRAPH_X_TAG[i])
+                y_axis = dpg.add_plot_axis(dpg.mvYAxis, label=plot, no_gridlines=True)
+
+                dpg.add_line_series([], [], parent=y_axis, tag=self.PLOT_SERIES_TAG[i])
