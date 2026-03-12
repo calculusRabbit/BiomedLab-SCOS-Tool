@@ -1,161 +1,114 @@
-# Controller — glue between model (camera + processor) and view (UI).
+# ── controller/controller.py ──────────────────────────────────────────
+#  Glue between Pipeline and UI.
+#  Owns the timestamp — tracks elapsed time since acquisition started.
+# ──────────────────────────────────────────────────────────────────────
 
-import threading
 import time
 from collections import deque
-import queue
 
+import cv2
 import dearpygui.dearpygui as dpg
 import numpy as np
 
-from view.ui import SCOS_UI, TEXTURE_W, TEXTURE_H
-from model.scos_result import SCOSResult
-from model.processor import process_all_data
+from config import MAX_PLOT_POINTS, PLOT_WINDOW_SEC, TEXTURE_W, TEXTURE_H
+from model.pipeline import Pipeline
+from view.ui import SCOS_UI
 
 
 class SCOSController:
 
-    def __init__(self, ui: SCOS_UI, camera):
+    def __init__(self, ui: SCOS_UI, pipeline: Pipeline):
         self.ui = ui
-        self.camera = camera
+        self.pipeline = pipeline
+        self._start_time = 0.0
 
-        # threading
-        self._running = False
-        self._thread = None
-        self._queue = queue.Queue(maxsize=1)
+        self._t_buf   = deque(maxlen=MAX_PLOT_POINTS)
+        self._k2_buf  = deque(maxlen=MAX_PLOT_POINTS)
+        self._bfi_buf = deque(maxlen=MAX_PLOT_POINTS)
+        self._cc_buf  = deque(maxlen=MAX_PLOT_POINTS)
+        self._od_buf  = deque(maxlen=MAX_PLOT_POINTS)
 
-        self._timestamp = 0.0
-
-        # plot history buffers
-        self._max_points = 500
-        self._time_buf = deque(maxlen=self._max_points)
-        self._k2_buf  = deque(maxlen=self._max_points)
-        self._bfi_buf = deque(maxlen=self._max_points)
-        self._cc_buf  = deque(maxlen=self._max_points)
-        self._od_buf  = deque(maxlen=self._max_points)
-
-        # resize tracking
         self._last_size = (0, 0)
 
 
-
+    # set up call back 
     def setup_callbacks(self):
+        dpg.set_viewport_resize_callback(self._on_resize)
         dpg.set_item_callback(self.ui.BTN_PREVIEW, self._on_preview)
         dpg.set_item_callback(self.ui.BTN_STOP, self._on_stop)
-        dpg.set_item_callback(self.ui.INPUT_AUTOSCALE, self._on_autoFit)
+        dpg.set_item_callback(self.ui.BTN_AUTOSCALE, self._on_autoscale)
+
+    # execute when close the whole app
+    def shutdown(self):
+        self.pipeline.stop()
 
 
-    def update_UI(self):
-        self._handle_resize()
-        self._drain_queue()
+    # main loop hook, keep updating for graph
+    def update(self) -> None:
+        output = self.pipeline.get_latest()
+        if output is not None:
+            self._push_frame(output)
+            self._push_plots(output)
 
 
-    # button callbacks
-    def _on_autoFit(self):
-        # auto fit y axis
-        for plot_tag in self.ui.GRAPH_TAG:
-            dpg.fit_axis_data(dpg.get_item_children(plot_tag, 1)[1])  # y-axis is second child
-
-
+    ## CallBack
     def _on_preview(self):
-        self._start_acquisition()
+        self._start_time = time.time()
+        self.pipeline.start()
 
+    def _on_start(self):
+        pass
 
-    def _on_stop(self):
-        self._stop_acquisition()
+    def _on_pause(self):
+        pass
+
+    def _on_stop(self) -> None:
+        self.pipeline.stop()
         self._clear_buffers()
 
 
-    # acquisition (start / stop / worker thread)
-    def _start_acquisition(self):
-        if self._running:
-            return
-        self.camera.open()
-        self._running = True
-        self._thread = threading.Thread(target=self._worker, daemon=True)
-        self._thread.start()
+    def _on_autoscale(self):
+        for tag in self.ui.GRAPH_TAG:
+            y_tag = dpg.get_item_children(tag, 1)[1]
+            dpg.fit_axis_data(y_tag)
 
-
-    def _stop_acquisition(self):
-        self._running = False
-        if self._thread:
-            self._thread.join(timeout=2.0)
-            self._thread = None
-        self.camera.close()
-
-
-    def _worker(self):
-        start = time.time()
-        while self._running:
-            frame = self.camera.grab_frame()
-            if frame is None:
-                continue
-
-            self.timestamp = time.time() - start
-            result = process_all_data(frame)
-
-            try:
-                self._queue.put_nowait(result)
-            except queue.Full:
-                pass
-
-
-    # UI updates (main thread only)
-
-    def _drain_queue(self):
-        try:
-            result = self._queue.get_nowait()
-        except queue.Empty:
-            return
-        self._update_frame(result)
-        self._update_plots(result)
-
-
-    def _update_frame(self, result: SCOSResult):
-        frame = result.frame
-        h, w = frame.shape[:2]
-
+    ## UI updates
+    def _push_frame(self, output):
+        frame = output.frame
+        h, w  = frame.shape[:2]
         if h != TEXTURE_H or w != TEXTURE_W:
-            import cv2
             frame = cv2.resize(frame, (TEXTURE_W, TEXTURE_H))
-
         norm = frame.astype(np.float32) / 255.0
-        rgb = np.stack([norm, norm, norm], axis=-1).flatten()
-        dpg.set_value(self.ui.LIVE_TEXTURE, rgb)
+        # 
+        rgb  = np.stack([norm, norm, norm], axis=-1) #duplicate grayscale into R, G, B channels = (H, W, 3)
+        dpg.set_value(self.ui.LIVE_TEXTURE, rgb.flatten()) # then flatten to 1D for DearPyGui
 
 
-    def _update_plots(self, result: SCOSResult):
-        self._time_buf.append(self.timestamp)
-        self._k2_buf.append(result.k2)
-        self._bfi_buf.append(result.bfi)
-        self._cc_buf.append(result.cc)
-        self._od_buf.append(result.od)
+    def _push_plots(self, output):
+        t = time.time() - self._start_time
+        self._t_buf.append(t)
+        self._k2_buf.append(output.k2)
+        self._bfi_buf.append(output.bfi)
+        self._cc_buf.append(output.cc)
+        self._od_buf.append(output.od)
 
-        t = list(self._time_buf)
-        bufs = [self._k2_buf, self._bfi_buf, self._cc_buf, self._od_buf]
+        times = list(self._t_buf)
+        for i, buf in enumerate([self._k2_buf, self._bfi_buf, self._cc_buf, self._od_buf]):
+            dpg.set_value(self.ui.PLOT_SERIES_TAG[i], [times, list(buf)])
 
-        for i, buf in enumerate(bufs):
-            dpg.set_value(self.ui.PLOT_SERIES_TAG[i], [t, list(buf)])
-
-        if t:
-            window = 10.0
-            x_max = max(window, t[-1]) + 0.5
-            x_min = x_max - window
+        if times:
+            x_max = max(PLOT_WINDOW_SEC, times[-1]) + 0.5
+            x_min = x_max - PLOT_WINDOW_SEC
             for x_tag in self.ui.GRAPH_X_TAG:
                 dpg.set_axis_limits(x_tag, x_min, x_max)
 
-
     def _clear_buffers(self):
-        self._time_buf.clear()
-        self._k2_buf.clear()
-        self._bfi_buf.clear()
-        self._cc_buf.clear()
-        self._od_buf.clear()
+        for buf in (self._t_buf, self._k2_buf, self._bfi_buf, self._cc_buf, self._od_buf):
+            buf.clear()
 
 
-    # resize
-
-    def _handle_resize(self):
+    # resize(rescale) all UI(button, graph, space...)
+    def _on_resize(self):
         w = dpg.get_viewport_client_width()
         h = dpg.get_viewport_client_height()
         if (w, h) != self._last_size and w > 0 and h > 0:

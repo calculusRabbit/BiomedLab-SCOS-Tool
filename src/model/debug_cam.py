@@ -34,3 +34,4 @@ class DebugCamera():
     def close(self) -> None:
         if self._cap:
             self._cap.release()
+            self._cap = None

@@ -11,9 +11,8 @@ import dearpygui.dearpygui as dpg
 from view.ui import SCOS_UI
 from view.themes import create_theme
 from controller.callbacks import SCOSController
-
-VIEWPORT_W = 1280
-VIEWPORT_H = 720
+from model.pipeline import Pipeline
+from config import VIEWPORT_W, VIEWPORT_H, VIEWPORT_MIN_W, VIEWPORT_MIN_H
 
 
 def main():
@@ -26,33 +25,34 @@ def main():
         pass
         # later on actual camera will place here
 
+    pipeline = Pipeline(camera)
 
-    # ── build UI ──────────────────────────────────────────────
+    # build UI
     dpg.create_context()
     dpg.bind_theme(create_theme())
 
     ui = SCOS_UI()
     ui.create_ui(VIEWPORT_W, VIEWPORT_H)
 
-    # ── wire controller ───────────────────────────────────────
-    controller = SCOSController(ui, camera)
+    # wire controller 
+    controller = SCOSController(ui, pipeline)
     controller.setup_callbacks()
 
     # ── launch viewport ───────────────────────────────────────
     dpg.create_viewport(title="SCOS Data Acquisition",
                         width=VIEWPORT_W, height=VIEWPORT_H,
-                        min_width=900, min_height=550)
+                        min_width=VIEWPORT_MIN_W, min_height=VIEWPORT_MIN_H)
     dpg.setup_dearpygui()
     dpg.show_viewport()
     dpg.set_primary_window(SCOS_UI.MAIN_WINDOW, True)
 
     # ── render loop ───────────────────────────────────────────
     while dpg.is_dearpygui_running():
-        controller.update_UI()
+        controller.update()
         dpg.render_dearpygui_frame()
 
     # ── cleanup ───────────────────────────────────────────────
-    controller._stop_acquisition()
+    controller.shutdown()
     dpg.destroy_context()
 
 
