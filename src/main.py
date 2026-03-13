@@ -19,7 +19,7 @@ def main():
     # python main.py --debug output.avi
     if "--debug" in sys.argv:
         from model.debug_cam import DebugCamera
-        video_path = sys.argv[2] 
+        video_path = sys.argv[2]
         camera = DebugCamera(video_path)
     else:
         pass
@@ -38,7 +38,7 @@ def main():
     controller = SCOSController(ui, pipeline)
     controller.setup_callbacks()
 
-    # ── launch viewport ───────────────────────────────────────
+    # lauch
     dpg.create_viewport(title="SCOS Data Acquisition",
                         width=VIEWPORT_W, height=VIEWPORT_H,
                         min_width=VIEWPORT_MIN_W, min_height=VIEWPORT_MIN_H)
@@ -46,12 +46,12 @@ def main():
     dpg.show_viewport()
     dpg.set_primary_window(SCOS_UI.MAIN_WINDOW, True)
 
-    # ── render loop ───────────────────────────────────────────
+    # render loop
     while dpg.is_dearpygui_running():
         controller.update()
         dpg.render_dearpygui_frame()
 
-    # ── cleanup ───────────────────────────────────────────────
+    # cleanup
     controller.shutdown()
     dpg.destroy_context()
 

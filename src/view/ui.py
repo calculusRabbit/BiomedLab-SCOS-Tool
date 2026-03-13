@@ -64,6 +64,8 @@ class SCOS_UI:
         ("Stop",    BTN_STOP),
     ]
 
+    ROI_DRAWLIST = "roi_drawlist"
+
     # ── layout math ───────────────────────────────────────────────────
 
     def _compute_layout(self, win_w: int, win_h: int) -> _Layout:
@@ -108,7 +110,8 @@ class SCOS_UI:
         dpg.configure_item(self.PANEL_LEFT,   width=lo.left_col_w)
         dpg.configure_item(self.PANEL_K2_MAP, height=lo.k2_map_panel_h)
         dpg.configure_item(self.PANEL_DEVICE, width=lo.device_panel_w)
-        dpg.configure_item(self.LIVE_IMAGE,   width=lo.roi_image_w, height=lo.roi_image_h)
+        dpg.configure_item(self.ROI_DRAWLIST, width=lo.roi_image_w, height=lo.roi_image_h)
+        dpg.configure_item(self.LIVE_IMAGE,   pmax=(lo.roi_image_w, lo.roi_image_h))
         for tag in self.K2_MAP_TAG:
             dpg.configure_item(tag, width=lo.k2_map_bar_w)
         for tag in self.GRAPH_TAG:
@@ -182,17 +185,20 @@ class SCOS_UI:
                 blank = np.zeros(TEXTURE_W * TEXTURE_H * 3, dtype="f")
                 dpg.add_raw_texture(width=TEXTURE_W, height=TEXTURE_H, tag=self.LIVE_TEXTURE,
                                     default_value=blank, format=dpg.mvFormat_Float_rgb)
-            dpg.add_image(self.LIVE_TEXTURE,
-                          width=lo.roi_image_w, height=lo.roi_image_h,
-                          tag=self.LIVE_IMAGE)
-            
-            
+            # drawlist = canvas, draw image first then ROI rectangle on top
+            with dpg.drawlist(tag=self.ROI_DRAWLIST,
+                            width=lo.roi_image_w, height=lo.roi_image_h):
+                dpg.draw_image(self.LIVE_TEXTURE,
+                            pmin=(0, 0),
+                            pmax=(lo.roi_image_w, lo.roi_image_h),
+                            tag=self.LIVE_IMAGE)
             with dpg.table(header_row=False, policy=dpg.mvTable_SizingStretchProp, pad_outerX=True):
                 dpg.add_table_column()
                 for label, tag in self._ROI_BUTTONS:
                     with dpg.table_row():
                         dpg.add_button(label=label, tag=tag, width=-1, height=ROI_BTN_HEIGHT)
 
+                        
     # right column
     def _right_column(self, lo: _Layout) -> None:
         with dpg.child_window(width=-1, height=-1, border=False, no_scrollbar=True):

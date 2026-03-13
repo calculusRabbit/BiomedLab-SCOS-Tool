@@ -15,6 +15,10 @@ class Pipeline:
         self._queue = queue.Queue(maxsize=1)
         self._running = False
         self._thread = None
+        self._get_roi = None
+
+    def set_roi_source(self, get_roi) -> None:
+        self._get_roi = get_roi
 
     def start(self) -> None:
         if self._running:
@@ -38,17 +42,30 @@ class Pipeline:
         except queue.Empty:
             return None
 
-
     def _run(self) -> None:
         while self._running:
             frame = self._camera.grab_frame()
             if frame is None:
                 continue
-            output = process_all_data(frame)
-            try:
-                self._queue.put_nowait(output)
-            except queue.Full:
-                pass    # UI busy - drop this frame, show next one
 
+            full_frame = frame  # always keep full frame for display
+
+            # crop only for processing
+            if self._get_roi is not None:
+                x1, y1, x2, y2 = self._get_roi()
+                x1 = max(0, min(x1, frame.shape[1]))
+                y1 = max(0, min(y1, frame.shape[0]))
+                x2 = max(0, min(x2, frame.shape[1]))
+                y2 = max(0, min(y2, frame.shape[0]))
+                if x2 > x1 and y2 > y1:
+                    frame = frame[y1:y2, x1:x2]
+
+            output = process_all_data(frame)
+
+            try:
+                # put_nowait with full_frame for display, cropped already used for processing
+                self._queue.put_nowait((full_frame, output))
+            except queue.Full:
+                pass
 
 
