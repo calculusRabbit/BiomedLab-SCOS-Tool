@@ -1,8 +1,8 @@
 import cv2
 import numpy as np
+from model.base_camera import BaseCamera
 
-
-class DebugCamera():
+class DebugCamera(BaseCamera):
     def __init__(self, video_path):
         self._path = video_path
         self._cap: cv2.VideoCapture

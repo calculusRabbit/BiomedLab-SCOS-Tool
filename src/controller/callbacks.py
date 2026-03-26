@@ -40,6 +40,7 @@ class SCOSController:
         dpg.set_item_callback(self.ui.BTN_PREVIEW, self._on_preview)
         dpg.set_item_callback(self.ui.BTN_STOP, self._on_stop)
         dpg.set_item_callback(self.ui.BTN_AUTOSCALE, self._on_autoscale)
+        dpg.set_item_callback(self.ui.BTN_SCAN, self._on_scan)
         self._roi.setup_handlers()
 
         
@@ -75,6 +76,9 @@ class SCOSController:
         self._recording = False
 
 
+    def _on_scan(self):
+        pass
+
     def _on_autoscale(self):
         for tag in self.ui.GRAPH_TAG:
             y_tag = dpg.get_item_children(tag, 1)[1]
@@ -107,6 +111,11 @@ class SCOSController:
             for x_tag in self.ui.GRAPH_X_TAG:
                 if self._recording:
                     dpg.set_axis_limits(x_tag, x_min, x_max)
+
+
+    def _push_K2_bars(self):
+        pass
+
 
     def _clear_buffers(self):
         for buf in (self._t_buf, self._k2_buf, self._bfi_buf, self._cc_buf, self._od_buf):

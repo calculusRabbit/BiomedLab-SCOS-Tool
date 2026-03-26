@@ -3,9 +3,10 @@
 import cv2
 from pypylon import pylon
 import numpy as np
+from model.base_camera import BaseCamera
 
 
-class Camera():
+class Camera(BaseCamera):
     def __init__(self, device_num: int = 0):
         self._camera = None
         self._device_index = device_num
@@ -30,18 +31,24 @@ class Camera():
 
     
     def grab_frame(self):
-        # if no frame arrives in 5 seconds = timeout
-        grabResult = self._camera.RetrieveResult(5000, pylon.TimeoutHandling_ThrowException)
+        try:
+            # if no frame arrives in 5 seconds = timeout
+            grabResult = self._camera.RetrieveResult(5000, pylon.TimeoutHandling_ThrowException)
 
-        if grabResult.GrabSucceeded():
-            frame = grabResult.Array
+            if grabResult.GrabSucceeded():
+                frame = grabResult.Array
+                grabResult.Release()
+                return frame
             grabResult.Release()
-            return frame
-
-        grabResult.Release()
-        return None
+            return None
+        except Exception as e:
+            print(f"Camera grab frame got error: {e}")
+            return None
     
 
     def close(self):
-        self._camera.StopGrabbing()
-        self._camera.Close()
+        try:
+            self._camera.StopGrabbing()
+            self._camera.Close()
+        except Exception as e:
+            print(f"Camera close error: {e}")

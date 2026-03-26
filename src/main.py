@@ -23,8 +23,7 @@ def main():
         camera = DebugCamera(video_path)
     else:
         from model.camera import Camera
-        camera = Camera()
-        # later on actual camera will place here
+        camera = Camera() #actual camera
 
     pipeline = Pipeline(camera)
 
@@ -59,3 +58,11 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+# 1. fix Camera → inherit BaseCamera
+# 2. fix main.py import paths
+# 3. clean up SCOSResult (remove frame field, pipeline doesn't use it)
+# 4. add error handling to Camera
+# 5. ask Dr. Gao about K2 heat map columns and file format

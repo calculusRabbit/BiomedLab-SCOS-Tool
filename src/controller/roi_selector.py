@@ -11,7 +11,7 @@ _HANDLE_TAGS  = ["roi_tl", "roi_tr", "roi_bl", "roi_br"]
 
 class ROISelector:
 
-    def __init__(self, drawlist_tag: str, display_w: int, display_h: int):
+    def __init__(self, drawlist_tag, display_w, display_h):
         self._drawlist  = drawlist_tag
         self._display_w = display_w
         self._display_h = display_h
@@ -22,9 +22,11 @@ class ROISelector:
         self._x2 = display_w * 0.75
         self._y2 = display_h * 0.75
 
-        self._mode        = None   
+        self._mode = None   
         self._drag_handle = None
         self._drag_offset = (0, 0)
+
+        
 
     def setup_handlers(self):
         # set up listeners and event

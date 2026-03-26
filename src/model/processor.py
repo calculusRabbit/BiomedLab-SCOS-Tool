@@ -4,17 +4,15 @@ import numpy as np
 
 @dataclass(frozen=True)
 class SCOSResult:
-    frame:    np.ndarray
-    k2:       float = 0.0
-    bfi:      float = 0.0
-    cc:       float = 0.0
-    od:       float = 0.0
+    k2: float = 0.0
+    bfi: float = 0.0
+    cc: float = 0.0
+    od: float = 0.0
     k2_image: np.ndarray | None = None
 
 
 def process_all_data(frame: np.ndarray) -> SCOSResult:
     return SCOSResult(
-        frame = frame,
         k2 = compute_k2(frame),
         bfi = compute_bfi(frame),
         cc = compute_cc(frame),
