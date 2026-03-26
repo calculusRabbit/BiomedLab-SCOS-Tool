@@ -20,15 +20,15 @@ class Pipeline:
     def set_roi_source(self, get_roi) -> None:
         self._get_roi = get_roi
 
-    def start(self) -> None:
+    def start(self):
         if self._running:
             return
         self._camera.open()
         self._running = True
-        self._thread  = threading.Thread(target=self._run, daemon=True)
+        self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
-    def stop(self) -> None:
+    def stop(self):
         self._running = False
         if self._thread:
             self._thread.join(timeout=3.0)
@@ -42,7 +42,7 @@ class Pipeline:
         except queue.Empty:
             return None
 
-    def _run(self) -> None:
+    def _run(self):
         while self._running:
             frame = self._camera.grab_frame()
             if frame is None:

@@ -22,7 +22,8 @@ def main():
         video_path = sys.argv[2]
         camera = DebugCamera(video_path)
     else:
-        pass
+        from model.camera import Camera
+        camera = Camera()
         # later on actual camera will place here
 
     pipeline = Pipeline(camera)

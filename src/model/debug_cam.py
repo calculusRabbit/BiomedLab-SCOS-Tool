@@ -1,8 +1,3 @@
-"""
-Debug camera — loops an .avi file to simulate live camera feed.
-Usage:  python main.py --debug path/to/output.avi
-"""
-
 import cv2
 import numpy as np
 

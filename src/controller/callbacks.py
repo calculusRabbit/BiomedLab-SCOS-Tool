@@ -1,8 +1,3 @@
-# ── controller/controller.py ──────────────────────────────────────────
-#  Glue between Pipeline and UI.
-#  Owns the timestamp — tracks elapsed time since acquisition started.
-# ──────────────────────────────────────────────────────────────────────
-
 import time
 from collections import deque
 
@@ -23,11 +18,11 @@ class SCOSController:
         self.pipeline = pipeline
         self._start_time = 0.0
 
-        self._t_buf   = deque(maxlen=MAX_PLOT_POINTS)
-        self._k2_buf  = deque(maxlen=MAX_PLOT_POINTS)
+        self._t_buf = deque(maxlen=MAX_PLOT_POINTS)
+        self._k2_buf = deque(maxlen=MAX_PLOT_POINTS)
         self._bfi_buf = deque(maxlen=MAX_PLOT_POINTS)
-        self._cc_buf  = deque(maxlen=MAX_PLOT_POINTS)
-        self._od_buf  = deque(maxlen=MAX_PLOT_POINTS)
+        self._cc_buf = deque(maxlen=MAX_PLOT_POINTS)
+        self._od_buf = deque(maxlen=MAX_PLOT_POINTS)
 
         self._last_size = (0, 0)
 
@@ -36,18 +31,18 @@ class SCOSController:
 
     # set up call back 
     def setup_callbacks(self):
-        # ROISelector MUST be created here — UI is fully rendered at this point
-        # creating in __init__ gives width=0, height=0 because UI isn't built yet
         self._roi = ROISelector(
             drawlist_tag = self.ui.ROI_DRAWLIST,
-            display_w    = dpg.get_item_width(self.ui.ROI_DRAWLIST),
-            display_h    = dpg.get_item_height(self.ui.ROI_DRAWLIST),
+            display_w = dpg.get_item_width(self.ui.ROI_DRAWLIST),
+            display_h = dpg.get_item_height(self.ui.ROI_DRAWLIST),
         )
         dpg.set_viewport_resize_callback(self._on_resize)
-        dpg.set_item_callback(self.ui.BTN_PREVIEW,   self._on_preview)
-        dpg.set_item_callback(self.ui.BTN_STOP,      self._on_stop)
+        dpg.set_item_callback(self.ui.BTN_PREVIEW, self._on_preview)
+        dpg.set_item_callback(self.ui.BTN_STOP, self._on_stop)
         dpg.set_item_callback(self.ui.BTN_AUTOSCALE, self._on_autoscale)
         self._roi.setup_handlers()
+
+        
     # execute when close the whole app
     def shutdown(self):
         self.pipeline.stop()
@@ -86,7 +81,7 @@ class SCOSController:
             dpg.fit_axis_data(y_tag)
 
     ## UI updates
-    def _push_frame(self, frame):          # takes frame directly now
+    def _push_frame(self, frame): # takes frame directly now
         h, w = frame.shape[:2]
         if h != TEXTURE_H or w != TEXTURE_W:
             frame = cv2.resize(frame, (TEXTURE_W, TEXTURE_H))
