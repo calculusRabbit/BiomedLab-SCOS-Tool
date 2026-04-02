@@ -56,6 +56,7 @@ class SCOSController:
             full_frame, output = result
             self._push_frame(full_frame)   # always full frame
             self._push_plots(output)
+            self._push_K2_bars(output)
 
 
     ## CallBack
@@ -113,8 +114,17 @@ class SCOSController:
                     dpg.set_axis_limits(x_tag, x_min, x_max)
 
 
-    def _push_K2_bars(self):
-        pass
+    def _push_K2_bars(self, output):
+        for i, img in enumerate(output.k2_images):
+            if img is None:
+                continue
+            if img.shape[:2] != (TEXTURE_H, TEXTURE_W):
+                img = cv2.resize(img, (TEXTURE_W, TEXTURE_H))
+            norm = img.astype(np.float32)
+            if norm.max() > 1.0:
+                norm = norm / 255.0
+            rgb = np.stack([norm, norm, norm], axis=-1)
+            dpg.set_value(self.ui.K2_TEXTURE_TAG[i], rgb.flatten())
 
 
     def _clear_buffers(self):
