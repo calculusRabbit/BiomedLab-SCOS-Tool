@@ -59,10 +59,3 @@ def main():
 if __name__ == "__main__":
     main()
 
-
-
-# 1. fix Camera → inherit BaseCamera
-# 2. fix main.py import paths
-# 3. clean up SCOSResult (remove frame field, pipeline doesn't use it)
-# 4. add error handling to Camera
-# 5. ask Dr. Gao about K2 heat map columns and file format
