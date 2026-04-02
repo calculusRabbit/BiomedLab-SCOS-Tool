@@ -50,15 +50,10 @@ class SCOS_UI:
     BTN_AUTOSCALE = "btn_fit_y"
 
 
-<<<<<<< HEAD
     K2_TEXTURE_TAG = ["tex_k2_0", "tex_k2_1", "tex_k2_2", "tex_k2_3", "tex_k2_4", "tex_k2_5"]
     K2_SERIES_TAG  = ["ser_k2_0", "ser_k2_1", "ser_k2_2", "ser_k2_3", "ser_k2_4", "ser_k2_5"]
     K2_MAP_TAG     = ["k2_map_0", "k2_map_1", "k2_map_2", "k2_map_3", "k2_map_4", "k2_map_5"]
     K2_Y_AXIS_TAG  = ["k2_y_0", "k2_y_1", "k2_y_2", "k2_y_3", "k2_y_4", "k2_y_5"  ]
-=======
-    K2_MAP_TAG = ["k2_raw", "k2_1", "k2_2", "k2_3", "k2_4", "k2_5"]
-    K2_Y_AXIS_TAG = ["k2_raw/y", "k2_1/y", "k2_2/y", "k2_3/y", "k2_4/y", "k2_5/y"]
->>>>>>> main
 
     # Right-side time series plots
     GRAPH_TAG = ["K2", "BFI", "CC", "OD"]
@@ -135,7 +130,6 @@ class SCOS_UI:
             with dpg.group(horizontal=True):
                 self._device_panel(lo)
                 self._roi_panel(lo)
-<<<<<<< HEAD
 
     def _k2_map_panel(self, lo: _Layout) -> None:
         with dpg.child_window(tag=self.PANEL_K2_MAP, width=-1,
@@ -150,18 +144,10 @@ class SCOS_UI:
                                         tag=tex_tag, default_value=blank,
                                         format=dpg.mvFormat_Float_rgb)
 
-=======
-
-    def _k2_map_panel(self, lo: _Layout) -> None:
-        with dpg.child_window(tag=self.PANEL_K2_MAP, width=-1,
-                               height=lo.k2_map_panel_h, border=True, no_scrollbar=True):
-            dpg.add_text("K^2 Spatial Map")
->>>>>>> main
             with dpg.group(horizontal=True):
                 for i, tag in enumerate(self.K2_MAP_TAG):
                     with dpg.plot(tag=tag, label=tag, width=lo.k2_map_bar_w, height=-1):
                         dpg.add_plot_axis(dpg.mvXAxis, no_tick_labels=True, no_gridlines=True)
-<<<<<<< HEAD
                         y = dpg.add_plot_axis(dpg.mvYAxis, no_tick_labels=True, no_gridlines=True,
                                             tag=self.K2_Y_AXIS_TAG[i])
                         # image series — swap this for add_heat_series when K² is ready
@@ -173,14 +159,6 @@ class SCOS_UI:
                     dpg.bind_colormap(tag, dpg.mvPlotColormap_Jet)
     # ROI rectangle
 
-=======
-                        dpg.add_plot_axis(dpg.mvYAxis, no_tick_labels=True, no_gridlines=True,
-                                          tag=self.K2_Y_AXIS_TAG[i])
-                    dpg.bind_colormap(tag, dpg.mvPlotColormap_Jet)
-
-    # ROI rectangle
-
->>>>>>> main
 
     def _device_panel(self, lo: _Layout) -> None:
         with dpg.child_window(tag=self.PANEL_DEVICE, width=lo.device_panel_w,
