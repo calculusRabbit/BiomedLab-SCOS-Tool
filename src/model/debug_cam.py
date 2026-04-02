@@ -1,18 +1,18 @@
 import cv2
-import numpy as np
 from model.base_camera import BaseCamera
 
 class DebugCamera(BaseCamera):
-    def __init__(self, video_path):
-        self._path = video_path
-        self._cap: cv2.VideoCapture
-        self.fps = 100.0
+
+    video_paths = [] # to contain multiple file of video
+
+    def __init__(self, index=0):
+        self._path = self.video_paths[index]
+        self._cap = None
 
     def open(self) -> None:
         self._cap = cv2.VideoCapture(self._path)
         if not self._cap.isOpened():
             raise FileNotFoundError(f"Cannot open video: {self._path}")
-        self.fps = 100.0
 
     def grab_frame(self):
         ret, frame = self._cap.read()
@@ -30,3 +30,11 @@ class DebugCamera(BaseCamera):
         if self._cap:
             self._cap.release()
             self._cap = None
+
+    @classmethod
+    def scan(cls):
+        result = []
+        for i, p in enumerate(cls.video_paths):
+            result.append(f"Debug [{i}] {p}")
+        return result
+            

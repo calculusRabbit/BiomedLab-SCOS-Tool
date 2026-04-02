@@ -184,8 +184,8 @@ class SCOS_UI:
                     dpg.add_input_text(tag=self.INPUT_RUN, width=-1)
                 with dpg.table_row():
                     dpg.add_text("Sampling Rate")
-                    dpg.add_slider_float(tag=self.RATE_SLIDER, min_value=10,
-                                          max_value=240, format="%.1f Hz", width=-1)
+                    dpg.add_slider_int(tag=self.RATE_SLIDER, min_value=10, max_value=100, default_value=30,
+                                       format="%d Hz", width=-1)
 
     def _roi_panel(self, lo: _Layout) -> None:
         with dpg.child_window(width=-1, height=-1, border=True, no_scrollbar=True):

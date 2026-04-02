@@ -11,21 +11,20 @@ import dearpygui.dearpygui as dpg
 from view.ui import SCOS_UI
 from view.themes import create_theme
 from controller.callbacks import SCOSController
-from model.pipeline import Pipeline
+from controller.camera_manager import CameraManager
 from config import VIEWPORT_W, VIEWPORT_H, VIEWPORT_MIN_W, VIEWPORT_MIN_H
 
 
 def main():
     # python main.py --debug output.avi
+    camera_class = None
     if "--debug" in sys.argv:
         from model.debug_cam import DebugCamera
-        video_path = sys.argv[2]
-        camera = DebugCamera(video_path)
+        DebugCamera.video_paths = sys.argv[2:]
+        camera_class = DebugCamera
     else:
         from model.camera import Camera
-        camera = Camera() #actual camera
-
-    pipeline = Pipeline(camera)
+        camera_class = Camera #actual camera class
 
     # build UI
     dpg.create_context()
@@ -35,7 +34,8 @@ def main():
     ui.create_ui(VIEWPORT_W, VIEWPORT_H)
 
     # wire controller 
-    controller = SCOSController(ui, pipeline)
+    manager = CameraManager(camera_class)
+    controller = SCOSController(ui, manager)
     controller.setup_callbacks()
 
     # lauch
@@ -58,11 +58,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-# 1. fix Camera → inherit BaseCamera
-# 2. fix main.py import paths
-# 3. clean up SCOSResult (remove frame field, pipeline doesn't use it)
-# 4. add error handling to Camera
-# 5. ask Dr. Gao about K2 heat map columns and file format

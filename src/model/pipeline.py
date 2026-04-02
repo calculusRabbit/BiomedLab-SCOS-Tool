@@ -15,10 +15,8 @@ class Pipeline:
         self._queue = queue.Queue(maxsize=1)
         self._running = False
         self._thread = None
-        self._get_roi = None
 
-    def set_roi_source(self, get_roi) -> None:
-        self._get_roi = get_roi
+        self.roi_pixels = None
 
     def start(self):
         if self._running:
@@ -49,10 +47,11 @@ class Pipeline:
                 continue
 
             full_frame = frame  # always keep full frame for display
+            roi = self.roi_pixels
 
             # crop only for processing
-            if self._get_roi is not None:
-                x1, y1, x2, y2 = self._get_roi()
+            if roi is not None:
+                x1, y1, x2, y2 = roi   
                 x1 = max(0, min(x1, frame.shape[1]))
                 y1 = max(0, min(y1, frame.shape[0]))
                 x2 = max(0, min(x2, frame.shape[1]))
