@@ -2,7 +2,7 @@
 from collections import deque
 
 from model.pipeline import Pipeline
-from config import MAX_PLOT_POINTS, TEXTURE_W, TEXTURE_H
+from config import MAX_PLOT_POINTS, TEXTURE_W, TEXTURE_H, CAMERA_W, CAMERA_H
 
 
 class CameraSession:
@@ -79,6 +79,6 @@ class CameraManager:
     def roi_to_pixels(self, session):
         nx1, ny1, nx2, ny2 = session.roi_norm
         return (
-            int(nx1 * TEXTURE_W), int(ny1 * TEXTURE_H),
-            int(nx2 * TEXTURE_W), int(ny2 * TEXTURE_H),
+            int(nx1 * CAMERA_W), int(ny1 * CAMERA_H),
+            int(nx2 * CAMERA_W), int(ny2 * CAMERA_H),
         )

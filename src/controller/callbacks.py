@@ -5,7 +5,7 @@ import cv2
 import dearpygui.dearpygui as dpg
 import numpy as np
 
-from config import TEXTURE_W, TEXTURE_H, PLOT_WINDOW_SEC
+from config import TEXTURE_W, TEXTURE_H, PLOT_WINDOW_SEC, CAMERA_PIXEL_MAX
 from controller.roi_selector import ROISelector
 
 
@@ -78,11 +78,11 @@ class SCOSController:
         if active is None:
             return
         if active.last_frame is not None:
-            self._push_frame(active.last_frame)
-        else:
-            self._clear_display()
+            self._push_frame(active.last_frame) # camera connected and running
+
         if self._is_running and active.t_buf:
             self._push_plots(active)
+            self._push_k2_images()
 
 
     # callbacks
@@ -244,12 +244,15 @@ class SCOSController:
 
 
     def _push_frame(self, frame):
-         # update time series data and slide the x-axis window to show the last seconds
         if frame.shape[:2] != (TEXTURE_H, TEXTURE_W):
             frame = cv2.resize(frame, (TEXTURE_W, TEXTURE_H))
-        norm = frame.astype(np.float32) / 255.0
-        rgb = np.stack([norm, norm, norm], axis=-1)
-        dpg.set_value(self.ui.LIVE_TEXTURE, rgb.flatten())
+        # convert grayscale (H,W) into float normalized to 0.0-1.0 because dpg only take this type
+        norm = frame.astype(np.float32) / CAMERA_PIXEL_MAX
+        # DPG raw texture requires RGB float format - stack grayscale into 3 channels
+        # shape: (H, W) => (H, W, 3) => flatten to 1D for dpg.set_value
+        rgb = np.repeat(norm[:, :, np.newaxis], 3, axis=2).flatten()
+        # update live image
+        dpg.set_value(self.ui.LIVE_TEXTURE, rgb)
 
 
     def _push_plots(self, session):
@@ -261,3 +264,18 @@ class SCOSController:
         t_min = t_max - PLOT_WINDOW_SEC
         for x_tag in self.ui.GRAPH_X_TAG:
             dpg.set_axis_limits(x_tag, t_min, t_max)
+
+
+    def _push_k2_images(self, output):
+        for i, img in enumerate(output.k2_images):
+            if img is None:
+                continue
+            # resize to fixed texture size — ROI can be any size but texture is always fixed
+            img_resized = cv2.resize(img.astype(np.float32), (K2_TEXTURE_W, K2_TEXTURE_H))
+            # normalize to 0.0-1.0 for DPG texture
+            mn, mx = img_resized.min(), img_resized.max()
+            if mx > mn:
+                img_resized = (img_resized - mn) / (mx - mn)
+            # expand grayscale to RGB and flatten for dpg.set_value
+            rgb = np.repeat(img_resized[:, :, np.newaxis], 3, axis=2).flatten()
+            dpg.set_value(self.ui.K2_TEXTURE_TAG[i], rgb)

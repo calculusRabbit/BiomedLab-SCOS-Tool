@@ -1,12 +1,13 @@
 # actual camera
 from pypylon import pylon
 from model.base_camera import BaseCamera
+from config import CAMERA_PIXEL_FORMAT
 
 
 class Camera(BaseCamera):
     def __init__(self, index= 0):
         self._camera = None
-        self.index = index
+        self._index = index
         
 
     def open(self):
@@ -16,13 +17,14 @@ class Camera(BaseCamera):
             if len(devices) == 0:
                 raise RuntimeError("No camera found")
             
-            self._camera = pylon.InstantCamera(tl_factory.CreateDevice(devices[self.index]))
+            self._camera = pylon.InstantCamera(tl_factory.CreateDevice(devices[self._index]))
             
         except Exception:
             print("EnumerateDevices failed, trying CreateFirstDevice...")
             self._camera = pylon.InstantCamera(pylon.TlFactory.GetInstance().CreateFirstDevice())
         
         self._camera.Open()
+        self._camera.PixelFormat.Value  = CAMERA_PIXEL_FORMAT
         self._camera.ExposureTime.Value = 20000
         self._camera.Gain.Value = 10
         self._camera.StartGrabbing(pylon.GrabStrategy_LatestImageOnly)

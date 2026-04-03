@@ -10,6 +10,7 @@ from config import (
     PADDING, ITEM_SPACING,
     TEXTURE_W, TEXTURE_H,
     CAM_HEIGHT_RATIO, DEVICE_WIDTH_RATIO, ROI_BTN_HEIGHT,
+    K2_TEXTURE_W, K2_TEXTURE_H
 )
 
 
@@ -52,6 +53,8 @@ class SCOS_UI:
 
     K2_MAP_TAG = ["k2_raw", "k2_1", "k2_2", "k2_3", "k2_4", "k2_5"]
     K2_Y_AXIS_TAG = ["k2_raw/y", "k2_1/y", "k2_2/y", "k2_3/y", "k2_4/y", "k2_5/y"]
+    K2_TEXTURE_TAG = ["tex_k2_0", "tex_k2_1", "tex_k2_2", "tex_k2_3", "tex_k2_4", "tex_k2_5"]
+    K2_SERIES_TAG  = ["ser_k2_0", "ser_k2_1", "ser_k2_2", "ser_k2_3", "ser_k2_4", "ser_k2_5"]
 
     # Right-side time series plots
     GRAPH_TAG = ["K2", "BFI", "CC", "OD"]
@@ -131,17 +134,25 @@ class SCOS_UI:
 
     def _k2_map_panel(self, lo: _Layout) -> None:
         with dpg.child_window(tag=self.PANEL_K2_MAP, width=-1,
-                               height=lo.k2_map_panel_h, border=True, no_scrollbar=True):
-            dpg.add_text("K^2 Spatial Map")
+                            height=lo.k2_map_panel_h, border=True, no_scrollbar=True):
+            dpg.add_text("K² Spatial Map")
+            with dpg.texture_registry(show=False):
+                blank = np.zeros(K2_TEXTURE_W * K2_TEXTURE_H * 3, dtype="f")
+                for tex_tag in self.K2_TEXTURE_TAG:
+                    dpg.add_raw_texture(width=K2_TEXTURE_W, height=K2_TEXTURE_H,
+                                        tag=tex_tag, default_value=blank,
+                                        format=dpg.mvFormat_Float_rgb)
             with dpg.group(horizontal=True):
                 for i, tag in enumerate(self.K2_MAP_TAG):
                     with dpg.plot(tag=tag, label=tag, width=lo.k2_map_bar_w, height=-1):
                         dpg.add_plot_axis(dpg.mvXAxis, no_tick_labels=True, no_gridlines=True)
-                        dpg.add_plot_axis(dpg.mvYAxis, no_tick_labels=True, no_gridlines=True,
-                                          tag=self.K2_Y_AXIS_TAG[i])
-                    dpg.bind_colormap(tag, dpg.mvPlotColormap_Jet)
-
-    # ROI rectangle
+                        y = dpg.add_plot_axis(dpg.mvYAxis, no_tick_labels=True, no_gridlines=True,
+                                            tag=self.K2_Y_AXIS_TAG[i])
+                        dpg.add_image_series(self.K2_TEXTURE_TAG[i],
+                                            bounds_min=(0, 0),
+                                            bounds_max=(K2_TEXTURE_W, K2_TEXTURE_H),
+                                            parent=y,
+                                            tag=self.K2_SERIES_TAG[i])
 
 
     def _device_panel(self, lo: _Layout) -> None:
