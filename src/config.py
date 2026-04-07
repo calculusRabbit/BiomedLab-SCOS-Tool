@@ -35,6 +35,11 @@ DEVICE_WIDTH_RATIO = 0.58
 ROI_BTN_HEIGHT = 32
 
 
-RECT_COLOR = (255, 0, 0, 255)
-HANDLE_COLOR = (255, 0, 0, 255)
 HANDLE_RADIUS = 6
+
+# Add a new ROI by adding one entry here — name: RGBA color tuple.
+# The default position for each ROI lives in state/roi_set.py _DEFAULTS.
+ROI_CONFIGS = {
+    "source":   (255, 0,   0,   255),  # red
+    "detector": (0,   120, 255, 255),  # blue
+}
