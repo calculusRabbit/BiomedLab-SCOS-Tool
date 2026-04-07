@@ -46,16 +46,16 @@ def compute_k2_t1(frame):
     return frame
 
 def compute_k2_t2(frame):
-    (frame * 0.8).astype(np.float32)
+    return (frame * 0.8).astype(np.float32)
 
 def compute_k2_t3(frame):
-    (frame * 0.6).astype(np.float32)
+    return (frame * 0.6).astype(np.float32)
 
 def compute_k2_t4(frame):
-    (frame * 0.4).astype(np.float32)
+    return (frame * 0.4).astype(np.float32)
 
 def compute_k2_t5(frame):
-    (frame * 0.2).astype(np.float32)
+    return (frame * 0.2).astype(np.float32)
 
 def compute_k2_t6(frame):
-    (frame * 0.1).astype(np.float32)
+    return (frame * 0.1).astype(np.float32)

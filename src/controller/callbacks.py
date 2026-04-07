@@ -5,7 +5,7 @@ import cv2
 import dearpygui.dearpygui as dpg
 import numpy as np
 
-from config import TEXTURE_W, TEXTURE_H, PLOT_WINDOW_SEC, CAMERA_PIXEL_MAX
+from config import TEXTURE_W, TEXTURE_H, PLOT_WINDOW_SEC, CAMERA_PIXEL_MAX, K2_TEXTURE_H, K2_TEXTURE_W
 from controller.roi_selector import ROISelector
 
 
@@ -82,7 +82,7 @@ class SCOSController:
 
         if self._is_running and active.t_buf:
             self._push_plots(active)
-            self._push_k2_images()
+            self._push_k2_images(output)
 
 
     # callbacks
