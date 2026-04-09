@@ -39,11 +39,12 @@ class Pipeline:
         self.gain: float = 10.0
         # TESTING, CHANGE THIS LATER!!!
         # Load dark image as grayscale and convert to float64
-        dark_img = cv2.imread("debug_data/dark.png", cv2.IMREAD_GRAYSCALE)
+        dark_img = cv2.imread("/home/neuroimagelab/Neuro_image_lab/2026/Project/image_20260407/avg_dark/average_image.png", cv2.IMREAD_GRAYSCALE)
         if dark_img is not None:
             self.dark_image: np.ndarray | None = dark_img.astype(np.float64)
         else:
             self.dark_image: np.ndarray | None = None
+        # REMOVE above after done
 
     ## public API ##
 
@@ -79,6 +80,7 @@ class Pipeline:
     ## worker thread ##
 
     def _run(self) -> None:
+        # test:
         while self._running:
             try:
                 frame = self._camera.grab_frame()
@@ -97,6 +99,7 @@ class Pipeline:
                     dark_cropped = crop_frame(self.dark_image, self.roi_pixels)
                 else:
                     dark_cropped = self.dark_image
+                print(np.all(dark_cropped == 0))
                 ## testing, remember to remove it later ##
 
                 # Pass frame_buf BEFORE appending current frame so k2^2sp sees only past frames

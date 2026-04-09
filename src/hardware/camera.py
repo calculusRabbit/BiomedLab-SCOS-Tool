@@ -12,10 +12,20 @@ class Camera(BaseCamera):
 
     @classmethod
     def scan(cls) -> list[str]:
+        # for grab multiple camera:
+        # https://github.com/basler/pypylon/blob/99eda73bf114457a91e129e4c19599355aa9774e/samples/grabmultiplecameras.py#L46
+
         try:
             tl = pylon.TlFactory.GetInstance()
             devices = tl.EnumerateDevices()
-            return [f"Basler [{i}] {d.GetModelName()}" for i, d in enumerate(devices)]
+            if len(devices) == 0:
+                print("No camera present")
+            result = []
+            
+            for i, d in enumerate(devices):
+                result.append(f"Basler [{i}] {d.GetModelName()}")
+
+            return result
         except Exception as e:
             print(f"[Camera.scan] {e}")
             return []

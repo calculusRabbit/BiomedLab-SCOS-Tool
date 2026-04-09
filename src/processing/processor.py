@@ -84,7 +84,6 @@ def compute_k_raw2(frame: np.ndarray, dark_image: np.ndarray | None) -> np.ndarr
     windowed_mean = np.mean(frame_windowed, axis=0)
     windowed_var = np.var(frame_windowed, axis=0)
     result = windowed_var / windowed_mean
-    print(result)
     return result
 
 
