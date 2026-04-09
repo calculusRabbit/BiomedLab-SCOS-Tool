@@ -1,16 +1,13 @@
-"""
-UI Controller — wires UI events to hardware and state.
 
-Responsibilities:
-  - Register DearPyGUI callbacks
-  - Drive the render loop (update called every frame)
-  - Read from AppState, write to AppState
-  - Delegate hardware operations to CameraManager
-  - Push display data to the view (textures, plots)
+# UI Controller - wires UI events to hardware and state.
 
-Does NOT own business logic — it orchestrates.
-Does NOT mutate session data buffers directly — calls session.data.push().
-"""
+# Responsibilities:
+# - Register dearpyGui callbacks
+# - Drive the render loop (update called every frame)
+# - Read from AppState, write to AppState
+# - Delegate hardware operations to CameraManager
+# - Push display data to the view (k2 images, plots)
+
 
 import time
 
@@ -36,9 +33,9 @@ from view.ui import SCOS_UI
 class UIController:
 
     def __init__(self, ui: SCOS_UI, manager: CameraManager, app_state: AppState):
-        self._ui        = ui
-        self._manager   = manager
-        self._state     = app_state
+        self._ui = ui
+        self._manager = manager
+        self._state = app_state
         self._last_size = (0, 0)
         self._rois: dict[str, ROISelector] = {}
 
@@ -48,7 +45,7 @@ class UIController:
         w = dpg.get_item_width(self._ui.ROI_DRAWLIST)
         h = dpg.get_item_height(self._ui.ROI_DRAWLIST)
 
-        # Each key matches a name in ROISet — add more ROI boxes here as needed
+        # Each key matches a name in ROISet, add more ROI boxes here as needed
         default_coords = ROISet()
         for name, color in ROI_CONFIGS.items():
             roi = ROISelector(self._ui.ROI_DRAWLIST, w, h, name=f"roi_{name}", color=color)
@@ -61,19 +58,19 @@ class UIController:
             dpg.add_mouse_release_handler(callback=self._on_mouse_release)
 
         dpg.set_viewport_resize_callback(self._on_resize)
-        dpg.set_item_callback(self._ui.BTN_SCAN,      self._on_scan)
-        dpg.set_item_callback(self._ui.BTN_CONNECT,   self._on_connect)
-        dpg.set_item_callback(self._ui.BTN_PREVIEW,   self._on_preview)
-        dpg.set_item_callback(self._ui.BTN_STOP,      self._on_stop)
+        dpg.set_item_callback(self._ui.BTN_SCAN,self._on_scan)
+        dpg.set_item_callback(self._ui.BTN_CONNECT,self._on_connect)
+        dpg.set_item_callback(self._ui.BTN_PREVIEW,self._on_preview)
+        dpg.set_item_callback(self._ui.BTN_STOP,self._on_stop)
         dpg.set_item_callback(self._ui.BTN_AUTOSCALE, self._on_autoscale)
         dpg.set_item_callback(self._ui.DEVICE_DROPDOWN, self._on_dropdown_change)
-        dpg.set_item_callback(self._ui.SLD_GAIN,      self._on_gain_change)
-        dpg.set_item_callback(self._ui.SLD_EXPOSURE,  self._on_exposure_change)
+        dpg.set_item_callback(self._ui.SLD_GAIN, self._on_gain_change)
+        dpg.set_item_callback(self._ui.SLD_EXPOSURE, self._on_exposure_change)
 
     def shutdown(self) -> None:
         self._manager.stop_all()
 
-    # ── render loop (called every frame from main.py) ─────────────────────────
+    ## render loop (called every frame from main.py) ##
 
     def update(self) -> None:
         # Pull latest data from every connected camera (all run in parallel)
@@ -86,13 +83,12 @@ class UIController:
             full_frame, output = result
             session.last_frame = full_frame
             from processing.utils import crop_frame
-            crop = crop_frame(full_frame, session.roi_set.to_pixels("detector"))
-            print(crop.shape)
+
 
             t = time.time() - session.data.start_time
             session.data.push(t, output)
 
-        # Only the active camera drives the display
+        # Only the active camera display the display
         active = self._manager.get_session(self._state.active_cam_id)
         if active is None:
             return
@@ -107,7 +103,7 @@ class UIController:
             if latest is not None:
                 self._push_k2_maps(latest)
 
-    # ── button callbacks ──────────────────────────────────────────────────────
+    ## button callbacks ##
 
     def _on_scan(self) -> None:
         names = self._manager.scan()
@@ -146,21 +142,21 @@ class UIController:
             y_tag = dpg.get_item_children(tag, 1)[1]
             dpg.fit_axis_data(y_tag)
 
-    # ── hardware parameter callbacks ──────────────────────────────────────────
+    # hardware(camera) parameter callbacks ##
 
     def _on_gain_change(self) -> None:
-        value   = float(dpg.get_value(self._ui.SLD_GAIN))
-        active  = self._manager.get_session(self._state.active_cam_id)
+        value = float(dpg.get_value(self._ui.SLD_GAIN))
+        active = self._manager.get_session(self._state.active_cam_id)
         if active and active.is_connected:
             active.pipeline.set_gain(value)
 
     def _on_exposure_change(self) -> None:
-        value  = float(dpg.get_value(self._ui.SLD_EXPOSURE))
+        value = float(dpg.get_value(self._ui.SLD_EXPOSURE))
         active = self._manager.get_session(self._state.active_cam_id)
         if active and active.is_connected:
             active.pipeline.set_exposure_time(value)
 
-    # ── resize ────────────────────────────────────────────────────────────────
+    ## resize ##
 
     def _on_resize(self) -> None:
         w = dpg.get_viewport_client_width()
@@ -175,7 +171,7 @@ class UIController:
             roi.update_display_size(new_w, new_h)
         self._save_rois_to_active()
 
-    # ── mouse events ──────────────────────────────────────────────────────────
+    # mouse events (for like user click or drag ROI box) ##
 
     def _on_mouse_down(self, s, a) -> None:
         mx, my = self._local_mouse()
@@ -187,7 +183,7 @@ class UIController:
         mx, my = self._local_mouse()
         for roi in self._rois.values():
             roi.on_mouse_move(mx, my)
-        # only sync ROI coords to session while actually dragging — not every mouse move
+        # only sync ROI coords to session while actually dragging, not every mouse move
         if any(roi.is_dragging() for roi in self._rois.values()):
             self._save_rois_to_active()
 
@@ -196,7 +192,7 @@ class UIController:
             roi.on_mouse_release()
         self._save_rois_to_active()  # final save when drag ends
 
-    # ── display helpers ───────────────────────────────────────────────────────
+    ## display helpers ##
 
     def _push_frame(self, frame) -> None:
         rgb = to_display_texture(frame / CAMERA_PIXEL_MAX, TEXTURE_W, TEXTURE_H)
@@ -211,13 +207,13 @@ class UIController:
             dpg.set_axis_limits(x_tag, t_max - PLOT_WINDOW_SEC, t_max)
 
     def _push_k2_maps(self, output: SCOSResult) -> None:
-        for i, img in enumerate(output.k2_maps):
+        for i, img in enumerate(output.k2_images):
             if img is None:
                 continue
             rgb = to_display_texture(img, K2_TEXTURE_W, K2_TEXTURE_H)
             dpg.set_value(self._ui.K2_TEXTURE_TAG[i], rgb)
 
-    # ── navigation helpers ────────────────────────────────────────────────────
+    ## navigation helpers ##
 
     def _switch_to(self, cam_id: str) -> None:
         self._save_rois_to_active()
@@ -235,7 +231,7 @@ class UIController:
         if session:
             for name, roi in self._rois.items():
                 session.roi_set.set(name, roi.get_coords_normalized())
-            # sync pipeline crop — only on ROI change, not every frame
+            # sync pipeline crop - only on ROI change, not every frame
             session.pipeline.roi_pixels = session.roi_set.to_pixels("source")
 
     def _selected_cam_id(self) -> str | None:
@@ -252,7 +248,7 @@ class UIController:
     def _sync_dropdown(self, active_cam_id: str) -> None:
         """Rebuild dropdown items and set the displayed label in one call."""
         connected = self._manager.connected_ids()
-        names     = [
+        names = [
             f"{n} (connected)" if n in connected else n
             for n in self._manager.scan_list
         ]
@@ -261,7 +257,7 @@ class UIController:
         dpg.set_value(self._ui.DEVICE_DROPDOWN, label)
 
     def _local_mouse(self) -> tuple[float, float]:
-        mx, my   = dpg.get_mouse_pos(local=False)
+        mx, my = dpg.get_mouse_pos(local=False)
         rect_min = dpg.get_item_rect_min(self._ui.ROI_DRAWLIST)
         return mx - rect_min[0], my - rect_min[1]
 

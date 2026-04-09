@@ -1,15 +1,3 @@
-"""
-Pure signal processing — no hardware, no UI, no state.
-
-This module can be imported in a Jupyter notebook and run standalone:
-    from processing.processor import process_all_data
-
-All functions operate on numpy arrays only.
-
---- MATLAB reference (Dr. Gao) ---
-The commented pseudocode below is the original MATLAB algorithm.
-Translate each function into Python/NumPy when implementing.
-"""
 
 from collections import deque
 
@@ -18,48 +6,28 @@ import numpy as np
 from processing.scos_result import SCOSResult
 
 
-WINDOW_SIZE = 7  # default spatial window size (pixels)
+WINDOW_SIZE = 7  # default window size (pixels)
 
 
-# ── top-level entry point ─────────────────────────────────────────────────────
+def process_all_data(frame: np.ndarray, gain: float, dark_image: np.ndarray | None, frame_buf: deque) -> SCOSResult:
 
-def process_all_data(
-    frame:      np.ndarray,
-    gain:       float,
-    dark_image: np.ndarray | None,
-    frame_buf:  deque,
-) -> SCOSResult:
-    """
-    Run the full SCOS pipeline on one cropped frame.
-
-    Parameters
-    ----------
-    frame       : (H, W) grayscale frame after ROI crop
-    gain        : camera gain — used for K_s² and K_sp²
-    dark_image  : (H, W) average dark calibration image — used for K_r²
-    frame_buf   : deque of the last N frames (NOT including current) — used for K_sp²
-
-    Returns
-    -------
-    SCOSResult with scalar metrics and 6 spatial K² component maps
-    """
-    k_raw2  = _compute_k_raw2(frame)
-    k_s2    = _compute_k_s2(frame, gain)
-    k_r2    = _compute_k_r2(frame, dark_image)
-    k_sp2   = _compute_k_sp2(frame, frame_buf, gain)
-    k_q2    = _compute_k_q2(frame)
-    k_f2    = _compute_k_f2(k_raw2, k_s2, k_r2, k_sp2, k_q2)
+    k_raw2 = _compute_k_raw2(frame)
+    k_s2 = _compute_k_s2(frame, gain)
+    k_r2 = _compute_k_r2(frame, dark_image)
+    k_sp2 = _compute_k_sp2(frame, frame_buf, gain)
+    k_q2 = _compute_k_q2(frame)
+    k_f2 = _compute_k_f2(k_raw2, k_s2, k_r2, k_sp2, k_q2)
 
     return SCOSResult(
-        k2      = float(np.mean(k_f2))  if k_f2  is not None else 0.0,
-        bfi     = _compute_bfi(k_f2),
-        cc      = _compute_cc(frame),
-        od      = _compute_od(frame),
-        k2_maps = (k_raw2, k_s2, k_r2, k_sp2, k_q2, k_f2),
+        k2 = float(np.mean(k_f2))  if k_f2  is not None else 0.0,
+        bfi = _compute_bfi(k_f2),
+        cc = _compute_cc(frame),
+        od = _compute_od(frame),
+        k2_images = (k_raw2, k_s2, k_r2, k_sp2, k_q2, k_f2),
     )
 
 
-# ── spatial windowing helper ──────────────────────────────────────────────────
+# spatial windowing 
 
 def _reshape_window(img: np.ndarray, window_size: int) -> np.ndarray:
     """

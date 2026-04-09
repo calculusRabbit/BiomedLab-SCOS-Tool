@@ -1,6 +1,3 @@
-#
-# SCOS Data Acquisition — Entry Point
-#
 # Usage:
 #   python main.py                        # production (Basler camera)
 #   python main.py --debug video.avi      # debug (loops video file)
@@ -32,15 +29,15 @@ def main():
     ui = SCOS_UI()
     ui.create_ui(VIEWPORT_W, VIEWPORT_H)
 
-    app_state  = AppState()
-    manager    = CameraManager(camera_class)
+    app_state = AppState()
+    manager = CameraManager(camera_class)
     controller = UIController(ui, manager, app_state)
     controller.setup()
 
     dpg.create_viewport(
-        title     = "SCOS Data Acquisition",
-        width     = VIEWPORT_W,
-        height    = VIEWPORT_H,
+        title = "SCOS Data Acquisition",
+        width  = VIEWPORT_W,
+        height = VIEWPORT_H,
         min_width = VIEWPORT_MIN_W,
         min_height= VIEWPORT_MIN_H,
     )

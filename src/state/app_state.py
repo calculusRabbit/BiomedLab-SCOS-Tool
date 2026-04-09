@@ -3,11 +3,10 @@ from dataclasses import dataclass
 
 @dataclass
 class AppState:
-    """
-    Single source of truth for global application state.
+    # Shared application state readable by any layer without importing the controller
+    # Write here from the controller only; hardware/processing layers read only
+    # this tell Who writes vs. reads — controller writes, others read
 
-    The UI controller reads and writes this. Nothing else should own
-    these two fields — they belong here, not scattered on the controller.
-    """
-    is_running:    bool       = False
-    active_cam_id: str | None = None
+      is_running: bool = False   # True while a camera session is active
+      active_cam_id: str | None = None # id of the currently selected camera
+

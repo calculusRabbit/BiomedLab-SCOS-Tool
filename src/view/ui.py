@@ -16,98 +16,98 @@ from config import (
 
 @dataclass
 class _Layout:
-    left_col_w:      int
-    k2_map_panel_h:  int
-    k2_map_bar_w:    int
-    device_panel_w:  int
-    trigger_bar_h:   int
-    plot_h:          int
-    roi_image_h:     int
-    roi_image_w:     int
+    left_col_w: int
+    k2_map_panel_h: int
+    k2_map_bar_w: int
+    device_panel_w: int
+    trigger_bar_h: int
+    plot_h: int
+    roi_image_h: int
+    roi_image_w: int
 
 
 class SCOS_UI:
 
-    # ── widget tags ───────────────────────────────────────────────────────────
-    MAIN_WINDOW     = "main_window"
-    PANEL_LEFT      = "panel_left"
-    PANEL_K2_MAP    = "panel_k2_map"
-    PANEL_DEVICE    = "panel_device"
+    # widget tags
+    MAIN_WINDOW = "main_window"
+    PANEL_LEFT = "panel_left"
+    PANEL_K2_MAP = "panel_k2_map"
+    PANEL_DEVICE = "panel_device"
 
     DEVICE_DROPDOWN = "dd_device"
-    BTN_SCAN        = "btn_scan"
-    BTN_CONNECT     = "btn_connect"
+    BTN_SCAN = "btn_scan"
+    BTN_CONNECT = "btn_connect"
 
-    INPUT_STUDY     = "inp_study"
-    BTN_CREATE      = "btn_create"
-    STUDY_DROPDOWN  = "dd_study"
-    INPUT_SUBJECT   = "inp_subject"
-    INPUT_RUN       = "inp_run"
-    RATE_SLIDER     = "sld_rate"
+    INPUT_STUDY = "inp_study"
+    BTN_CREATE = "btn_create"
+    STUDY_DROPDOWN = "dd_study"
+    INPUT_SUBJECT = "inp_subject"
+    INPUT_RUN = "inp_run"
+    RATE_SLIDER = "sld_rate"
 
     # Camera parameter controls
-    SLD_GAIN        = "sld_gain"
-    SLD_EXPOSURE    = "sld_exposure"
+    SLD_GAIN = "sld_gain"
+    SLD_EXPOSURE = "sld_exposure"
 
-    LIVE_TEXTURE    = "tex_live"
-    LIVE_IMAGE      = "img_live"
-    ROI_DRAWLIST    = "roi_drawlist"
+    LIVE_TEXTURE = "tex_live"
+    LIVE_IMAGE = "img_live"
+    ROI_DRAWLIST = "roi_drawlist"
 
-    BTN_PREVIEW     = "btn_preview"
-    BTN_START       = "btn_start"
-    BTN_PAUSE       = "btn_pause"
-    BTN_STOP        = "btn_stop"
-    BTN_AUTOSCALE   = "btn_fit_y"
+    BTN_PREVIEW = "btn_preview"
+    BTN_START = "btn_start"
+    BTN_PAUSE = "btn_pause"
+    BTN_STOP = "btn_stop"
+    BTN_AUTOSCALE = "btn_fit_y"
 
     # K² spatial map panel
-    K2_MAP_TAG      = ["k2_raw", "k2_1", "k2_2", "k2_3", "k2_4", "k2_5"]
-    K2_Y_AXIS_TAG   = ["k2_raw/y", "k2_1/y", "k2_2/y", "k2_3/y", "k2_4/y", "k2_5/y"]
-    K2_TEXTURE_TAG  = ["tex_k2_0", "tex_k2_1", "tex_k2_2", "tex_k2_3", "tex_k2_4", "tex_k2_5"]
-    K2_SERIES_TAG   = ["ser_k2_0", "ser_k2_1", "ser_k2_2", "ser_k2_3", "ser_k2_4", "ser_k2_5"]
+    K2_MAP_TAG = ["k2_raw", "k2_1", "k2_2", "k2_3", "k2_4", "k2_5"]
+    K2_Y_AXIS_TAG = ["k2_raw/y", "k2_1/y", "k2_2/y", "k2_3/y", "k2_4/y", "k2_5/y"]
+    K2_TEXTURE_TAG = ["tex_k2_0", "tex_k2_1", "tex_k2_2", "tex_k2_3", "tex_k2_4", "tex_k2_5"]
+    K2_SERIES_TAG = ["ser_k2_0", "ser_k2_1", "ser_k2_2", "ser_k2_3", "ser_k2_4", "ser_k2_5"]
 
     # Right-side time series plots
-    GRAPH_TAG        = ["K2",   "BFI",   "CC",   "OD"]
-    GRAPH_X_TAG      = ["K2_x", "BFI_x", "CC_x", "OD_x"]
-    PLOT_SERIES_TAG  = ["K2_s", "BFI_s", "CC_s", "OD_s"]
+    GRAPH_TAG = ["K2",   "BFI",   "CC",   "OD"]
+    GRAPH_X_TAG = ["K2_x", "BFI_x", "CC_x", "OD_x"]
+    PLOT_SERIES_TAG = ["K2_s", "BFI_s", "CC_s", "OD_s"]
 
     _ROI_BUTTONS = [
         ("Preview", BTN_PREVIEW),
-        ("Start",   BTN_START),
-        ("Pause",   BTN_PAUSE),
-        ("Stop",    BTN_STOP),
+        ("Start", BTN_START),
+        ("Pause", BTN_PAUSE),
+        ("Stop", BTN_STOP),
     ]
 
-    # ── layout math ───────────────────────────────────────────────────────────
+    ##layout math ##
 
     def _compute_layout(self, win_w: int, win_h: int) -> _Layout:
-        left_col_w     = win_w // 2 - ITEM_SPACING
-        inner_w        = left_col_w - 2 * PADDING
+        left_col_w = win_w // 2 - ITEM_SPACING
+        inner_w = left_col_w - 2 * PADDING
         k2_map_panel_h = int(win_h * CAM_HEIGHT_RATIO)
-        n_k2_maps      = len(self.K2_MAP_TAG)
-        k2_map_bar_w   = (inner_w - 2 * PADDING - (n_k2_maps - 1) * ITEM_SPACING) // n_k2_maps
+        n_k2_maps = len(self.K2_MAP_TAG)
+        k2_map_bar_w = (inner_w - 2 * PADDING - (n_k2_maps - 1) * ITEM_SPACING) // n_k2_maps
         device_panel_w = int(inner_w * DEVICE_WIDTH_RATIO)
-        trigger_bar_h  = 42
-        n_plots        = len(self.GRAPH_TAG)
-        plot_h         = max(110, (win_h - 2 * PADDING - trigger_bar_h - 2 * PADDING - 4
+        trigger_bar_h = 42
+        n_plots = len(self.GRAPH_TAG)
+        plot_h = max(110, (win_h - 2 * PADDING - trigger_bar_h - 2 * PADDING - 4
                                    - (n_plots - 1) * ITEM_SPACING) // n_plots)
-        roi_panel_h    = win_h - k2_map_panel_h - 2 * PADDING - ITEM_SPACING - 2 * PADDING
-        n_btns         = len(self._ROI_BUTTONS)
-        btn_area_h     = n_btns * (ROI_BTN_HEIGHT + 8) + (n_btns - 1) * ITEM_SPACING
-        roi_image_h    = max(80, roi_panel_h - 60 - btn_area_h)
-        roi_image_w    = inner_w - device_panel_w - ITEM_SPACING - 2 * PADDING
+        roi_panel_h = win_h - k2_map_panel_h - 2 * PADDING - ITEM_SPACING - 2 * PADDING
+        n_btns = len(self._ROI_BUTTONS)
+        btn_area_h = n_btns * (ROI_BTN_HEIGHT + 8) + (n_btns - 1) * ITEM_SPACING
+        roi_image_h = max(80, roi_panel_h - 60 - btn_area_h)
+        roi_image_w = inner_w - device_panel_w - ITEM_SPACING - 2 * PADDING
 
         return _Layout(
-            left_col_w     = left_col_w,
+            left_col_w = left_col_w,
             k2_map_panel_h = k2_map_panel_h,
-            k2_map_bar_w   = k2_map_bar_w,
+            k2_map_bar_w = k2_map_bar_w,
             device_panel_w = device_panel_w,
-            trigger_bar_h  = trigger_bar_h,
-            plot_h         = plot_h,
-            roi_image_h    = roi_image_h,
-            roi_image_w    = roi_image_w,
+            trigger_bar_h = trigger_bar_h,
+            plot_h = plot_h,
+            roi_image_h = roi_image_h,
+            roi_image_w = roi_image_w,
         )
 
-    # ── public ────────────────────────────────────────────────────────────────
+    ## public ##
 
     def create_ui(self, win_w: int = 1280, win_h: int = 720) -> None:
         layout = self._compute_layout(win_w, win_h)
@@ -118,17 +118,17 @@ class SCOS_UI:
 
     def resize(self, win_w: int, win_h: int) -> None:
         lo = self._compute_layout(win_w, win_h)
-        dpg.configure_item(self.PANEL_LEFT,    width=lo.left_col_w)
-        dpg.configure_item(self.PANEL_K2_MAP,  height=lo.k2_map_panel_h)
-        dpg.configure_item(self.PANEL_DEVICE,  width=lo.device_panel_w)
-        dpg.configure_item(self.ROI_DRAWLIST,  width=lo.roi_image_w, height=lo.roi_image_h)
-        dpg.configure_item(self.LIVE_IMAGE,    pmax=(lo.roi_image_w, lo.roi_image_h))
+        dpg.configure_item(self.PANEL_LEFT, width=lo.left_col_w)
+        dpg.configure_item(self.PANEL_K2_MAP, height=lo.k2_map_panel_h)
+        dpg.configure_item(self.PANEL_DEVICE, width=lo.device_panel_w)
+        dpg.configure_item(self.ROI_DRAWLIST, width=lo.roi_image_w, height=lo.roi_image_h)
+        dpg.configure_item(self.LIVE_IMAGE, pmax=(lo.roi_image_w, lo.roi_image_h))
         for tag in self.K2_MAP_TAG:
             dpg.configure_item(tag, width=lo.k2_map_bar_w)
         for tag in self.GRAPH_TAG:
             dpg.configure_item(tag, height=lo.plot_h)
 
-    # ── left column ───────────────────────────────────────────────────────────
+    ## left column ##
 
     def _left_column(self, lo: _Layout) -> None:
         with dpg.child_window(tag=self.PANEL_LEFT, width=lo.left_col_w,
@@ -238,8 +238,7 @@ class SCOS_UI:
                     with dpg.table_row():
                         dpg.add_button(label=label, tag=tag, width=-1, height=ROI_BTN_HEIGHT)
 
-    # ── right column ──────────────────────────────────────────────────────────
-
+    # right column
     def _right_column(self, lo: _Layout) -> None:
         with dpg.child_window(width=-1, height=-1, border=False, no_scrollbar=True):
             self._trigger_bar(lo)

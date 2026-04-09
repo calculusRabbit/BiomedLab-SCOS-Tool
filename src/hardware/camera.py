@@ -32,9 +32,9 @@ class Camera(BaseCamera):
             self._camera = pylon.InstantCamera(pylon.TlFactory.GetInstance().CreateFirstDevice())
 
         self._camera.Open()
-        self._camera.PixelFormat.Value  = CAMERA_PIXEL_FORMAT
+        self._camera.PixelFormat.Value = CAMERA_PIXEL_FORMAT
         self._camera.ExposureTime.Value = 20000
-        self._camera.Gain.Value         = 10
+        self._camera.Gain.Value = 10
         self._camera.StartGrabbing(pylon.GrabStrategy_LatestImageOnly)
 
     def grab_frame(self):

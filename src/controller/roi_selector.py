@@ -4,33 +4,32 @@ from config import HANDLE_RADIUS
 
 
 class ROISelector:
-    """
-    Draggable, resizable ROI rectangle drawn on a DearPyGUI drawlist.
 
-    Each instance gets a unique tag prefix so multiple ROISelectors can
-    coexist on different drawlists without tag collisions.
+    # Draggable, resizable ROI rectangle drawn on a real time Image
 
-    The controller decides WHEN to show/hide — this class just obeys.
-    Coordinate data (normalized) is stored in ROISet (state layer),
-    not here — this is a pure UI widget.
-    """
+    # Each instance gets a unique tag prefix
+
+    # The controller decides WHEN to show/hide — this class just obeys.
+    # Coordinate data (normalized) is stored in ROISet (state layer),
+
+
 
     def __init__(
         self,
-        drawlist:  str,
+        drawlist: str,
         display_w: int,
         display_h: int,
-        name:      str   = "roi",
-        color:     tuple = (255, 0, 0, 255),
+        name: str = "roi",
+        color: tuple = (255, 0, 0, 255),
     ):
-        self._drawlist  = drawlist
+        self._drawlist = drawlist
         self._display_w = float(display_w)
         self._display_h = float(display_h)
-        self._visible   = True
-        self._color     = color
+        self._visible = True
+        self._color = color
 
-        # unique DearPyGUI tags per instance — prevents collisions with multiple ROIs
-        self._tag_rect    = f"{name}_rect"
+        # unique DearPyGUI tags per instance = prevents collisions with multiple ROIs
+        self._tag_rect = f"{name}_rect"
         self._tag_handles = {
             "tl": f"{name}_tl",
             "tr": f"{name}_tr",
@@ -43,13 +42,13 @@ class ROISelector:
         self._x2 = display_w * 0.75
         self._y2 = display_h * 0.75
 
-        self._mode        = None   # None | "moving" | "resizing"
+        self._mode = None   # None | "moving" | "resizing"
         self._drag_handle = None
         self._drag_offset = (0.0, 0.0)
 
         self._draw()
 
-    # ── visibility ────────────────────────────────────────────────────────────
+    # visibility ##
 
     def show(self) -> None:
         self._visible = True
@@ -66,7 +65,7 @@ class ROISelector:
     def is_visible(self) -> bool:
         return self._visible
 
-    # ── coordinates ───────────────────────────────────────────────────────────
+    ## coordinates ##
 
     def get_coords_normalized(self) -> tuple[float, float, float, float]:
         return (
@@ -86,23 +85,25 @@ class ROISelector:
     def update_display_size(self, display_w: int, display_h: int) -> None:
         sx = display_w / self._display_w
         sy = display_h / self._display_h
-        self._x1 *= sx;  self._y1 *= sy
-        self._x2 *= sx;  self._y2 *= sy
+        self._x1 *= sx;  
+        self._y1 *= sy
+        self._x2 *= sx;  
+        self._y2 *= sy
         self._display_w = float(display_w)
         self._display_h = float(display_h)
         self._redraw()
 
-    # ── mouse events (coords already in drawlist-local space) ─────────────────
+    ## mouse events (coords already in drawlist-local space) #
 
     def on_mouse_down(self, mx: float, my: float) -> None:
         if self._mode is not None:
             return
         handle = self._hit_handle(mx, my)
         if handle:
-            self._mode        = "resizing"
+            self._mode = "resizing"
             self._drag_handle = handle
         elif self._x1 <= mx <= self._x2 and self._y1 <= my <= self._y2:
-            self._mode        = "moving"
+            self._mode = "moving"
             self._drag_offset = (mx - self._x1, my - self._y1)
 
     def on_mouse_move(self, mx: float, my: float) -> None:
@@ -117,13 +118,13 @@ class ROISelector:
         self._redraw()
 
     def on_mouse_release(self) -> None:
-        self._mode        = None
+        self._mode = None
         self._drag_handle = None
 
     def is_dragging(self) -> bool:
         return self._mode is not None
 
-    # ── private ───────────────────────────────────────────────────────────────
+    ## private ##
 
     def _draw(self) -> None:
         x1, y1, x2, y2 = self._x1, self._y1, self._x2, self._y2

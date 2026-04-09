@@ -4,13 +4,13 @@ from hardware.base_camera import BaseCamera
 
 
 class DebugCamera(BaseCamera):
-    """Loops a video file — used for development without physical hardware."""
+    # Loop a video file used for development without physical hardware camerea
 
     video_paths: list[str] = []
 
     def __init__(self, index: int = 0):
         self._path = self.video_paths[index]
-        self._cap  = None
+        self._cap = None
 
     @classmethod
     def scan(cls) -> list[str]:
@@ -36,5 +36,3 @@ class DebugCamera(BaseCamera):
         if self._cap:
             self._cap.release()
             self._cap = None
-
-    # set_gain / set_exposure_time intentionally not overridden — base no-ops are fine.

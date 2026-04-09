@@ -7,27 +7,25 @@ from processing.scos_result import SCOSResult
 
 
 class SCOSTimeSeries:
-    """
-    Rolling time-series buffers for one camera session.
+    
+    # Rolling time-series buffers for one camera session.
 
-    The controller never touches these buffers directly.
-    It calls push() and clear() — this class owns its own data.
 
-    Designed so adding SNIRF/BIDS saving later is one method:
-        def save_snirf(self, path): ...
-    """
+    # Designed so adding SNIRF/BIDS saving later is one method:
+    # def save_snirf(self, path)
+    
 
     def __init__(self):
         self.start_time: float = 0.0
         self._last_result: SCOSResult | None = None
 
-        self._t_buf   = deque(maxlen=MAX_PLOT_POINTS)
-        self._k2_buf  = deque(maxlen=MAX_PLOT_POINTS)
+        self._t_buf = deque(maxlen=MAX_PLOT_POINTS)
+        self._k2_buf = deque(maxlen=MAX_PLOT_POINTS)
         self._bfi_buf = deque(maxlen=MAX_PLOT_POINTS)
-        self._cc_buf  = deque(maxlen=MAX_PLOT_POINTS)
-        self._od_buf  = deque(maxlen=MAX_PLOT_POINTS)
+        self._cc_buf = deque(maxlen=MAX_PLOT_POINTS)
+        self._od_buf = deque(maxlen=MAX_PLOT_POINTS)
 
-    # ── write ─────────────────────────────────────────────────────────────────
+    ## WRITE ##
 
     def push(self, t: float, result: SCOSResult) -> None:
         self._t_buf.append(t)
@@ -43,7 +41,7 @@ class SCOSTimeSeries:
         self.start_time   = 0.0
         self._last_result = None
 
-    # ── read ──────────────────────────────────────────────────────────────────
+    ## READ ##
 
     def latest(self) -> SCOSResult | None:
         """Return the most recent SCOSResult, or None if no data yet."""
