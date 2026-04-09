@@ -16,8 +16,8 @@ CAMERA_BIT_DEPTH = 8  # change to 10 or 12 if needed but have to be match above 
 CAMERA_PIXEL_MAX = float(2**CAMERA_BIT_DEPTH - 1) # 255.0, 1023.0, 4095.0
 
 # Display texture resolution (used for live feed display)
-TEXTURE_W = 640
-TEXTURE_H = 400
+TEXTURE_W = 1920
+TEXTURE_H = 1200
 
 #k2 6 map
 K2_TEXTURE_W = 2**7 #128
