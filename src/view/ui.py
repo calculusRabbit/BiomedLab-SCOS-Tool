@@ -10,6 +10,7 @@ from config import (
     PADDING, ITEM_SPACING,
     TEXTURE_W, TEXTURE_H,
     CAM_HEIGHT_RATIO, DEVICE_WIDTH_RATIO, ROI_BTN_HEIGHT,
+    K2_TEXTURE_W, K2_TEXTURE_H,
 )
 
 
@@ -27,36 +28,45 @@ class _Layout:
 
 class SCOS_UI:
 
-    # 
+    # widget tags
     MAIN_WINDOW = "main_window"
     PANEL_LEFT = "panel_left"
     PANEL_K2_MAP = "panel_k2_map"
     PANEL_DEVICE = "panel_device"
+
     DEVICE_DROPDOWN = "dd_device"
     BTN_SCAN = "btn_scan"
     BTN_CONNECT = "btn_connect"
+
     INPUT_STUDY = "inp_study"
     BTN_CREATE = "btn_create"
     STUDY_DROPDOWN = "dd_study"
     INPUT_SUBJECT = "inp_subject"
     INPUT_RUN = "inp_run"
     RATE_SLIDER = "sld_rate"
+
+    # Camera parameter controls
+    SLD_GAIN = "sld_gain"
+    SLD_EXPOSURE = "sld_exposure"
+
     LIVE_TEXTURE = "tex_live"
     LIVE_IMAGE = "img_live"
+    ROI_DRAWLIST = "roi_drawlist"
+
     BTN_PREVIEW = "btn_preview"
     BTN_START = "btn_start"
     BTN_PAUSE = "btn_pause"
     BTN_STOP = "btn_stop"
     BTN_AUTOSCALE = "btn_fit_y"
 
-
+    # K² spatial map panel
+    K2_MAP_TAG = ["k2_raw", "k2_1", "k2_2", "k2_3", "k2_4", "k2_5"]
+    K2_Y_AXIS_TAG = ["k2_raw/y", "k2_1/y", "k2_2/y", "k2_3/y", "k2_4/y", "k2_5/y"]
     K2_TEXTURE_TAG = ["tex_k2_0", "tex_k2_1", "tex_k2_2", "tex_k2_3", "tex_k2_4", "tex_k2_5"]
-    K2_SERIES_TAG  = ["ser_k2_0", "ser_k2_1", "ser_k2_2", "ser_k2_3", "ser_k2_4", "ser_k2_5"]
-    K2_MAP_TAG     = ["k2_map_0", "k2_map_1", "k2_map_2", "k2_map_3", "k2_map_4", "k2_map_5"]
-    K2_Y_AXIS_TAG  = ["k2_y_0", "k2_y_1", "k2_y_2", "k2_y_3", "k2_y_4", "k2_y_5"  ]
+    K2_SERIES_TAG = ["ser_k2_0", "ser_k2_1", "ser_k2_2", "ser_k2_3", "ser_k2_4", "ser_k2_5"]
 
     # Right-side time series plots
-    GRAPH_TAG = ["K2", "BFI", "CC", "OD"]
+    GRAPH_TAG = ["K2",   "BFI",   "CC",   "OD"]
     GRAPH_X_TAG = ["K2_x", "BFI_x", "CC_x", "OD_x"]
     PLOT_SERIES_TAG = ["K2_s", "BFI_s", "CC_s", "OD_s"]
 
@@ -67,9 +77,7 @@ class SCOS_UI:
         ("Stop", BTN_STOP),
     ]
 
-    ROI_DRAWLIST = "roi_drawlist"
-
-    # layout math
+    ##layout math ##
 
     def _compute_layout(self, win_w: int, win_h: int) -> _Layout:
         left_col_w = win_w // 2 - ITEM_SPACING
@@ -81,7 +89,7 @@ class SCOS_UI:
         trigger_bar_h = 42
         n_plots = len(self.GRAPH_TAG)
         plot_h = max(110, (win_h - 2 * PADDING - trigger_bar_h - 2 * PADDING - 4
-                                    - (n_plots - 1) * ITEM_SPACING) // n_plots)
+                                   - (n_plots - 1) * ITEM_SPACING) // n_plots)
         roi_panel_h = win_h - k2_map_panel_h - 2 * PADDING - ITEM_SPACING - 2 * PADDING
         n_btns = len(self._ROI_BUTTONS)
         btn_area_h = n_btns * (ROI_BTN_HEIGHT + 8) + (n_btns - 1) * ITEM_SPACING
@@ -99,7 +107,7 @@ class SCOS_UI:
             roi_image_w = roi_image_w,
         )
 
-    # public
+    ## public ##
 
     def create_ui(self, win_w: int = 1280, win_h: int = 720) -> None:
         layout = self._compute_layout(win_w, win_h)
@@ -110,18 +118,18 @@ class SCOS_UI:
 
     def resize(self, win_w: int, win_h: int) -> None:
         lo = self._compute_layout(win_w, win_h)
-        dpg.configure_item(self.PANEL_LEFT,   width=lo.left_col_w)
+        dpg.configure_item(self.PANEL_LEFT, width=lo.left_col_w)
         dpg.configure_item(self.PANEL_K2_MAP, height=lo.k2_map_panel_h)
         dpg.configure_item(self.PANEL_DEVICE, width=lo.device_panel_w)
         dpg.configure_item(self.ROI_DRAWLIST, width=lo.roi_image_w, height=lo.roi_image_h)
-        dpg.configure_item(self.LIVE_IMAGE,   pmax=(lo.roi_image_w, lo.roi_image_h))
+        dpg.configure_item(self.LIVE_IMAGE, pmax=(lo.roi_image_w, lo.roi_image_h))
         for tag in self.K2_MAP_TAG:
             dpg.configure_item(tag, width=lo.k2_map_bar_w)
         for tag in self.GRAPH_TAG:
             dpg.configure_item(tag, height=lo.plot_h)
 
+    ## left column ##
 
-    ## LEFT COLUMN
     def _left_column(self, lo: _Layout) -> None:
         with dpg.child_window(tag=self.PANEL_LEFT, width=lo.left_col_w,
                                height=-1, border=False, no_scrollbar=True):
@@ -133,49 +141,42 @@ class SCOS_UI:
 
     def _k2_map_panel(self, lo: _Layout) -> None:
         with dpg.child_window(tag=self.PANEL_K2_MAP, width=-1,
-                            height=lo.k2_map_panel_h, border=True, no_scrollbar=True):
-            dpg.add_text("K^2 Spatial Map")
-
-            # one blank texture per panel — updated each frame from callbacks
+                               height=lo.k2_map_panel_h, border=True, no_scrollbar=True):
+            dpg.add_text("K² Spatial Map")
             with dpg.texture_registry(show=False):
-                blank = np.zeros(TEXTURE_W * TEXTURE_H * 3, dtype="f")
+                blank = np.zeros(K2_TEXTURE_W * K2_TEXTURE_H * 3, dtype="f")
                 for tex_tag in self.K2_TEXTURE_TAG:
-                    dpg.add_raw_texture(width=TEXTURE_W, height=TEXTURE_H,
+                    dpg.add_raw_texture(width=K2_TEXTURE_W, height=K2_TEXTURE_H,
                                         tag=tex_tag, default_value=blank,
                                         format=dpg.mvFormat_Float_rgb)
-
             with dpg.group(horizontal=True):
                 for i, tag in enumerate(self.K2_MAP_TAG):
                     with dpg.plot(tag=tag, label=tag, width=lo.k2_map_bar_w, height=-1):
                         dpg.add_plot_axis(dpg.mvXAxis, no_tick_labels=True, no_gridlines=True)
                         y = dpg.add_plot_axis(dpg.mvYAxis, no_tick_labels=True, no_gridlines=True,
-                                            tag=self.K2_Y_AXIS_TAG[i])
-                        # image series — swap this for add_heat_series when K² is ready
+                                              tag=self.K2_Y_AXIS_TAG[i])
                         dpg.add_image_series(self.K2_TEXTURE_TAG[i],
-                                            bounds_min=(0, 0),
-                                            bounds_max=(TEXTURE_W, TEXTURE_H),
-                                            parent=y,
-                                            tag=self.K2_SERIES_TAG[i])
-                    dpg.bind_colormap(tag, dpg.mvPlotColormap_Jet)
-    # ROI rectangle
-
+                                             bounds_min=(0, 0),
+                                             bounds_max=(K2_TEXTURE_W, K2_TEXTURE_H),
+                                             parent=y, tag=self.K2_SERIES_TAG[i])
 
     def _device_panel(self, lo: _Layout) -> None:
         with dpg.child_window(tag=self.PANEL_DEVICE, width=lo.device_panel_w,
                                height=-1, border=True, no_scrollbar=True):
-            
+
+            # Device row
             with dpg.table(header_row=False, policy=dpg.mvTable_SizingStretchProp, pad_outerX=True):
                 dpg.add_table_column(width_fixed=True, init_width_or_weight=90)
                 dpg.add_table_column(width_stretch=True)
                 dpg.add_table_column(width_fixed=True, init_width_or_weight=55)
                 dpg.add_table_column(width_fixed=True, init_width_or_weight=65)
-
                 with dpg.table_row():
                     dpg.add_text("Device")
                     dpg.add_combo([], tag=self.DEVICE_DROPDOWN, width=-1)
-                    dpg.add_button(label="Scan", tag=self.BTN_SCAN, width=-1)
+                    dpg.add_button(label="Scan",    tag=self.BTN_SCAN,    width=-1)
                     dpg.add_button(label="Connect", tag=self.BTN_CONNECT, width=-1)
 
+            # Study / subject / run rows
             with dpg.table(header_row=False, policy=dpg.mvTable_SizingStretchProp, pad_outerX=True):
                 dpg.add_table_column(width_fixed=True, init_width_or_weight=90)
                 dpg.add_table_column(width_stretch=True)
@@ -200,36 +201,48 @@ class SCOS_UI:
                     dpg.add_input_text(tag=self.INPUT_RUN, width=-1)
                 with dpg.table_row():
                     dpg.add_text("Sampling Rate")
-                    dpg.add_slider_float(tag=self.RATE_SLIDER, min_value=10,
-                                          max_value=240, format="%.1f Hz", width=-1)
+                    dpg.add_slider_int(tag=self.RATE_SLIDER, min_value=10, max_value=100,
+                                       default_value=30, format="%d Hz", width=-1)
+
+            dpg.add_separator()
+
+            # Camera parameter controls
+            with dpg.table(header_row=False, policy=dpg.mvTable_SizingStretchProp, pad_outerX=True):
+                dpg.add_table_column(width_fixed=True, init_width_or_weight=90)
+                dpg.add_table_column(width_stretch=True)
+                with dpg.table_row():
+                    dpg.add_text("Gain")
+                    dpg.add_slider_float(tag=self.SLD_GAIN, min_value=0.0, max_value=24.0,
+                                         default_value=10.0, format="%.1f dB", width=-1)
+                with dpg.table_row():
+                    dpg.add_text("Exposure")
+                    dpg.add_slider_float(tag=self.SLD_EXPOSURE, min_value=100.0, max_value=100000.0,
+                                         default_value=20000.0, format="%.0f µs", width=-1)
 
     def _roi_panel(self, lo: _Layout) -> None:
         with dpg.child_window(width=-1, height=-1, border=True, no_scrollbar=True):
             dpg.add_text("ROI Selection")
             with dpg.texture_registry(show=False):
                 blank = np.zeros(TEXTURE_W * TEXTURE_H * 3, dtype="f")
-                dpg.add_raw_texture(width=TEXTURE_W, height=TEXTURE_H, tag=self.LIVE_TEXTURE,
-                                    default_value=blank, format=dpg.mvFormat_Float_rgb)
-            # drawlist = canvas, draw image first then ROI rectangle on top
+                dpg.add_raw_texture(width=TEXTURE_W, height=TEXTURE_H,
+                                    tag=self.LIVE_TEXTURE, default_value=blank,
+                                    format=dpg.mvFormat_Float_rgb)
             with dpg.drawlist(tag=self.ROI_DRAWLIST,
-                            width=lo.roi_image_w, height=lo.roi_image_h):
+                              width=lo.roi_image_w, height=lo.roi_image_h):
                 dpg.draw_image(self.LIVE_TEXTURE,
-                            pmin=(0, 0),
-                            pmax=(lo.roi_image_w, lo.roi_image_h),
-                            tag=self.LIVE_IMAGE)
+                               pmin=(0, 0), pmax=(lo.roi_image_w, lo.roi_image_h),
+                               tag=self.LIVE_IMAGE)
             with dpg.table(header_row=False, policy=dpg.mvTable_SizingStretchProp, pad_outerX=True):
                 dpg.add_table_column()
                 for label, tag in self._ROI_BUTTONS:
                     with dpg.table_row():
                         dpg.add_button(label=label, tag=tag, width=-1, height=ROI_BTN_HEIGHT)
 
-                        
     # right column
     def _right_column(self, lo: _Layout) -> None:
         with dpg.child_window(width=-1, height=-1, border=False, no_scrollbar=True):
             self._trigger_bar(lo)
             self._plots_panel(lo)
-
 
     def _trigger_bar(self, lo: _Layout) -> None:
         with dpg.child_window(width=-1, height=lo.trigger_bar_h, border=True, no_scrollbar=True):
