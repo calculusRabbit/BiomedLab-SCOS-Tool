@@ -12,11 +12,13 @@
 
 import queue
 import threading
+import time
 from collections import deque
 
 import cv2
 import numpy as np
 
+from config import CAMERA_DEFAULT_GAIN
 from hardware.base_camera import BaseCamera
 from processing.processor import process_all_data
 from processing.utils import crop_frame
@@ -35,8 +37,17 @@ class Pipeline:
 
         self._frame_buf: deque[np.ndarray] = deque(maxlen=_FRAME_BUF_SIZE)
 
+        # TESTING FOR FRAME RATE
+        self._grabbed = 0
+        self._processed = 0
+        self._dropped = 0
+        self._log_time = 0.0
+        self._start_time = 0.0
+        self._start_time = 0.0
+        # TESING REMOVE ABOVE REMEMBER
+
         self.roi_pixels:  tuple | None = None
-        self.gain: float = 10.0
+        self.gain: float = CAMERA_DEFAULT_GAIN
         # TESTING, CHANGE THIS LATER!!!
         # Load dark image as grayscale and convert to float64
         dark_img = cv2.imread("/home/neuroimagelab/Neuro_image_lab/2026/Project/image_20260407/avg_dark/average_image.png", cv2.IMREAD_GRAYSCALE)
@@ -80,12 +91,14 @@ class Pipeline:
     ## worker thread ##
 
     def _run(self) -> None:
-        # test:
+        self._start_time = self._log_time = time.time() #for testing, remove this later
         while self._running:
             try:
                 frame = self._camera.grab_frame()
                 if frame is None:
                     continue
+
+                self._grabbed += 1 #testing, remove this later
                 
                 full_frame = frame
                 if self.roi_pixels:
@@ -99,7 +112,6 @@ class Pipeline:
                     dark_cropped = crop_frame(self.dark_image, self.roi_pixels)
                 else:
                     dark_cropped = self.dark_image
-                print(np.all(dark_cropped == 0))
                 ## testing, remember to remove it later ##
 
                 # Pass frame_buf BEFORE appending current frame so k2^2sp sees only past frames
@@ -114,8 +126,29 @@ class Pipeline:
 
                 try:
                     self._queue.put_nowait((full_frame, output))
+                    self._processed += 1
                 except queue.Full:
-                    pass
+                    self._dropped += 1
+
+                # print summary every 2 seconds
+                now = time.time()
+                interval = now - self._log_time
+                if interval >= 2.0:
+                    camera_fps = self._grabbed   / interval
+                    process_fps = self._processed / interval
+                    drop_rate = 100 * self._dropped / self._grabbed if self._grabbed else 0
+                    elapsed = now - self._start_time
+                    print(
+                        f"[Pipeline] t={elapsed:.1f}s | "
+                        f"camera: {camera_fps:.1f} fps | "
+                        f"processed: {process_fps:.1f} fps | "
+                        f"grabbed: {self._grabbed} | "
+                        f"processed: {self._processed} | "
+                        f"dropped: {self._dropped} | "
+                        f"drop rate: {drop_rate:.1f}%"
+                    )
+                    self._grabbed = self._processed = self._dropped = 0
+                    self._log_time = now
             except Exception as e:
                 print(f"[Pipeline._run] {e}")
                 break

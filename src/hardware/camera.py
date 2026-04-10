@@ -1,7 +1,7 @@
 from pypylon import pylon
 
 from hardware.base_camera import BaseCamera
-from config import CAMERA_PIXEL_FORMAT
+from config import CAMERA_PIXEL_FORMAT, CAMERA_DEFAULT_GAIN, CAMERA_DEFAULT_EXPOSURE
 
 
 class Camera(BaseCamera):
@@ -43,8 +43,8 @@ class Camera(BaseCamera):
 
         self._camera.Open()
         self._camera.PixelFormat.Value = CAMERA_PIXEL_FORMAT
-        self._camera.ExposureTime.Value = 20000
-        self._camera.Gain.Value = 10
+        self._camera.ExposureTime.Value = CAMERA_DEFAULT_EXPOSURE
+        self._camera.Gain.Value = CAMERA_DEFAULT_GAIN
         self._camera.StartGrabbing(pylon.GrabStrategy_LatestImageOnly)
 
     def grab_frame(self):

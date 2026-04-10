@@ -37,6 +37,10 @@ ROI_BTN_HEIGHT = 32
 
 HANDLE_RADIUS = 6
 
+# Camera defaults
+CAMERA_DEFAULT_GAIN = 10.0
+CAMERA_DEFAULT_EXPOSURE = 20000.0
+
 # Add a new ROI by adding one entry here — name: RGBA color tuple.
 # The default position for each ROI lives in state/roi_set.py _DEFAULTS.
 ROI_CONFIGS = {
