@@ -2,8 +2,6 @@
 
 A application for speckle contrast optical spectroscopy (SCOS) data acquisition, live visualization, and real-time processing.
 
-This project was developed to support biomedical imaging workflows that require low-latency camera capture, ROI-based analysis, and real-time display of SCOS-related signals.
-
 ## Features
 
 - Real-time desktop GUI built with Dear PyGui
