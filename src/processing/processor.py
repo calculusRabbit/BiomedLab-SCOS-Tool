@@ -5,7 +5,7 @@ from processing.scos_result import SCOSResult
 WINDOW_SIZE = 7  # default window size (pixels)
 
 
-def process_all_data(frame: np.ndarray, gain: float, dark_image: np.ndarray | None, frame_buf: deque) -> SCOSResult:
+def process_all_data(frame: np.ndarray, gain: float, exposure_time: float, dark_image: np.ndarray | None, frame_buf: deque) -> SCOSResult:
 
     k_raw2 = compute_k_raw2(frame, dark_image)
     k_s2 = compute_k_s2(frame, gain)

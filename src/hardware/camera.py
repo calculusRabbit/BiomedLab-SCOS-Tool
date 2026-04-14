@@ -71,6 +71,12 @@ class Camera(BaseCamera):
         if self._camera and self._camera.IsOpen():
             self._camera.Gain.Value = value
 
+    def get_gain(self) -> float:
+        return self._camera.Gain.Value
+
     def set_exposure_time(self, value: float) -> None:
         if self._camera and self._camera.IsOpen():
             self._camera.ExposureTime.Value = value
+
+    def get_exposure_time(self) -> float:
+        return self._camera.ExposureTime.Value

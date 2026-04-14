@@ -1,6 +1,7 @@
 import cv2
 
 from hardware.base_camera import BaseCamera
+from config import CAMERA_DEFAULT_GAIN, CAMERA_DEFAULT_EXPOSURE
 
 
 class DebugCamera(BaseCamera):
@@ -11,6 +12,8 @@ class DebugCamera(BaseCamera):
     def __init__(self, index: int = 0):
         self._path = self.video_paths[index]
         self._cap = None
+        self._gain = CAMERA_DEFAULT_GAIN
+        self._exposure_time = CAMERA_DEFAULT_EXPOSURE
 
     @classmethod
     def scan(cls) -> list[str]:
@@ -36,3 +39,16 @@ class DebugCamera(BaseCamera):
         if self._cap:
             self._cap.release()
             self._cap = None
+
+
+    def set_gain(self, value: float) -> None:
+        self._gain = value
+
+    def get_gain(self) -> float:
+        return self._gain
+
+    def set_exposure_time(self, value: float) -> None:
+        self._exposure_time = value
+
+    def get_exposure_time(self) -> float:
+        return self._exposure_time

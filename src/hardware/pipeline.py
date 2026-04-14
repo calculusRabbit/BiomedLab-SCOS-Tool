@@ -18,7 +18,6 @@ from collections import deque
 import cv2
 import numpy as np
 
-from config import CAMERA_DEFAULT_GAIN
 from hardware.base_camera import BaseCamera
 from processing.processor import process_all_data
 from processing.utils import crop_frame
@@ -46,8 +45,7 @@ class Pipeline:
         self._start_time = 0.0
         # TESING REMOVE ABOVE REMEMBER
 
-        self.roi_pixels:  tuple | None = None
-        self.gain: float = CAMERA_DEFAULT_GAIN
+        self.roi_pixels: tuple | None = None
         # TESTING, CHANGE THIS LATER!!!
         # Load dark image as grayscale and convert to float64
         dark_img = cv2.imread("/home/neuroimagelab/Neuro_image_lab/2026/Project/image_20260407/avg_dark/average_image.png", cv2.IMREAD_GRAYSCALE)
@@ -82,7 +80,6 @@ class Pipeline:
             return None
 
     def set_gain(self, value: float) -> None:
-        self.gain = value
         self._camera.set_gain(value)
 
     def set_exposure_time(self, value: float) -> None:
@@ -116,10 +113,11 @@ class Pipeline:
 
                 # Pass frame_buf BEFORE appending current frame so k2^2sp sees only past frames
                 output = process_all_data(
-                    frame = cropped,
-                    gain = self.gain,
-                    dark_image = dark_cropped,
-                    frame_buf = self._frame_buf,
+                    frame=cropped,
+                    gain=self._camera.get_gain(),
+                    exposure_time=self._camera.get_exposure_time(),
+                    dark_image=dark_cropped,
+                    frame_buf=self._frame_buf,
                 )
 
                 self._frame_buf.append(cropped.copy())
