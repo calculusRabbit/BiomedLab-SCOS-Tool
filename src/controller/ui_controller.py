@@ -231,8 +231,7 @@ class UIController:
         if session:
             for name, roi in self._rois.items():
                 session.roi_set.set(name, roi.get_coords_normalized())
-            # sync pipeline crop - only on ROI change, not every frame
-            session.pipeline.roi_pixels = session.roi_set.to_pixels("source")
+            session.sync_pipeline_roi()
 
     def _selected_cam_id(self) -> str | None:
         """Map the dropdown's current display value back to a raw cam_id."""

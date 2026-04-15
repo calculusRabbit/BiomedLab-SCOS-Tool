@@ -9,7 +9,8 @@ def process_all_data(frame: np.ndarray, gain: float, exposure_time: float, dark_
     if dark_image is not None:
         frame = frame - dark_image #i assume we use frame - avg dark image for every function need frame
     frame_windowed = reshape_window(frame, WINDOW_SIZE)
-    windowed_mean = np.mean(frame_windowed, axis=0) 
+    windowed_mean = np.mean(frame_windowed, axis=0)
+    print("Windowed_mean", windowed_mean[-21:], "\n") 
 
     k_raw2 = compute_k_raw2(frame_windowed, windowed_mean)
     k_s2 = compute_k_s2(windowed_mean, gain)
@@ -181,7 +182,6 @@ def compute_k_f2(
     # return (Kf2)
 
     Kf2 = k_raw2 - k_s2 - k_r2 - k_sp2 - k_q2
-    print(Kf2)
     return Kf2
 
 
@@ -195,7 +195,6 @@ def compute_k2(k_f2: np.ndarray | None) -> float:
         return 0.0
     
     k2 = float(np.mean(k_f2))
-    print("K2: ", k2)
     return k2
 
 
@@ -206,7 +205,6 @@ def compute_bfi(k_f2: np.ndarray | None) -> float:
         print("k_f2 is none or mean is 0")
         return 0.0
     BFI = float(1 / np.mean(k_f2))
-    print("BFI: ", BFI)
     return BFI
 
 

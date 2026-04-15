@@ -45,7 +45,8 @@ class Pipeline:
         self._start_time = 0.0
         # TESING REMOVE ABOVE REMEMBER
 
-        self.roi_pixels: tuple | None = None
+        self._roi_pixels: tuple | None = None
+        self.crashed: bool = False
         # TESTING, CHANGE THIS LATER!!!
         # Load dark image as grayscale and convert to float64
         dark_img = cv2.imread("/home/neuroimagelab/Neuro_image_lab/2026/Project/image_20260407/avg_dark/average_image.png", cv2.IMREAD_GRAYSCALE)
@@ -79,6 +80,11 @@ class Pipeline:
         except queue.Empty:
             return None
 
+    def set_roi(self, roi_pixels: tuple | None) -> None:
+        if roi_pixels != self._roi_pixels:
+            self._frame_buf.clear()
+        self._roi_pixels = roi_pixels
+
     def set_gain(self, value: float) -> None:
         self._camera.set_gain(value)
 
@@ -98,15 +104,15 @@ class Pipeline:
                 self._grabbed += 1 #testing, remove this later
                 
                 full_frame = frame
-                if self.roi_pixels:
-                    cropped = crop_frame(frame, self.roi_pixels)
+                if self._roi_pixels:
+                    cropped = crop_frame(frame, self._roi_pixels)
                 else:
                     cropped = frame
 
                 # dark_cropped
                 ## testing, remember to remove it later ##
-                if self.dark_image is not None and self.roi_pixels:
-                    dark_cropped = crop_frame(self.dark_image, self.roi_pixels)
+                if self.dark_image is not None and self._roi_pixels:
+                    dark_cropped = crop_frame(self.dark_image, self._roi_pixels)
                 else:
                     dark_cropped = self.dark_image
                 ## testing, remember to remove it later ##
@@ -149,5 +155,6 @@ class Pipeline:
                     self._log_time = now
             except Exception as e:
                 print(f"[Pipeline._run] {e}")
-                break
+                self.crashed = True
+                self._running = False
 

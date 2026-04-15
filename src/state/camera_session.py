@@ -21,3 +21,6 @@ class CameraSession:
         self.roi_set: ROISet= ROISet()
         self.data: SCOSTimeSeries = SCOSTimeSeries()
         self.last_frame: np.ndarray | None = None
+
+    def sync_pipeline_roi(self) -> None:
+        self.pipeline.set_roi(self.roi_set.to_pixels("source"))
