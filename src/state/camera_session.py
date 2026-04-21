@@ -24,3 +24,8 @@ class CameraSession:
 
     def sync_pipeline_roi(self) -> None:
         self.pipeline.set_roi(self.roi_set.to_pixels("source"))
+
+    def reset(self, start_time: float) -> None:
+        self.data.clear()
+        self.data.start_time = start_time
+        self.pipeline.reset_temporal_buffer()

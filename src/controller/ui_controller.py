@@ -18,9 +18,9 @@ from config import (
     PLOT_WINDOW_SEC,
     CAMERA_PIXEL_MAX,
     K2_TEXTURE_W, K2_TEXTURE_H,
+    ROI_CONFIGS,
 )
 from controller.camera_manager import CameraManager
-from config import ROI_CONFIGS
 from controller.roi_selector import ROISelector
 from processing.scos_result import SCOSResult
 from processing.utils import to_display_texture
@@ -82,9 +82,6 @@ class UIController:
 
             full_frame, output = result
             session.last_frame = full_frame
-            from processing.utils import crop_frame
-
-
             t = time.time() - session.data.start_time
             session.data.push(t, output)
 
@@ -129,9 +126,7 @@ class UIController:
             return
         now = time.time()
         for cam_id in connected:
-            session = self._manager.get_session(cam_id)
-            session.data.clear()
-            session.data.start_time = now
+            self._manager.get_session(cam_id).reset(now)
         self._state.is_running = True
 
     def _on_stop(self) -> None:

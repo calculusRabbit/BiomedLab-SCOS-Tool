@@ -7,23 +7,20 @@
 #   gain
 #   dark_image
 #   roi_pixels
-#   frame_buf
+#   mean_frames (via TemporalBuffer)
 
 
 import queue
 import threading
 import time
-from collections import deque
 
 import cv2
 import numpy as np
 
 from hardware.base_camera import BaseCamera
 from processing.processor import process_all_data
+from processing.temporal_buffer import TemporalBuffer
 from processing.utils import crop_frame
-
-
-_FRAME_BUF_SIZE = 50
 
 
 class Pipeline:
@@ -34,7 +31,7 @@ class Pipeline:
         self._thread = None
         self._running = False
 
-        self._frame_buf: deque[np.ndarray] = deque(maxlen=_FRAME_BUF_SIZE)
+        self._temporal_buf = TemporalBuffer(max_frames=50)
 
         # TESTING FOR FRAME RATE
         self._grabbed = 0
@@ -81,9 +78,10 @@ class Pipeline:
             return None
 
     def set_roi(self, roi_pixels: tuple | None) -> None:
-        if roi_pixels != self._roi_pixels:
-            self._frame_buf.clear()
         self._roi_pixels = roi_pixels
+
+    def reset_temporal_buffer(self) -> None:
+        self._temporal_buf.reset()
 
     def set_gain(self, value: float) -> None:
         self._camera.set_gain(value)
@@ -117,16 +115,14 @@ class Pipeline:
                     dark_cropped = self.dark_image
                 ## testing, remember to remove it later ##
 
-                # Pass frame_buf BEFORE appending current frame so k2^2sp sees only past frames
+                mean_frames = self._temporal_buf.update(cropped)
                 output = process_all_data(
                     frame=cropped,
                     gain=self._camera.get_gain(),
                     exposure_time=self._camera.get_exposure_time(),
                     dark_image=dark_cropped,
-                    frame_buf=self._frame_buf,
+                    mean_frames=mean_frames,
                 )
-
-                self._frame_buf.append(cropped.copy())
 
                 try:
                     self._queue.put_nowait((full_frame, output))

@@ -1,21 +1,21 @@
-from collections import deque
 import numpy as np
 from processing.scos_result import SCOSResult
 
 WINDOW_SIZE = 7  # default window size (pixels)
 GAIN = 0.3755 # default gain use this for all computation
 
-def process_all_data(frame: np.ndarray, gain: float, exposure_time: float, dark_image: np.ndarray | None, frame_buf: deque) -> SCOSResult:
+def process_all_data(frame: np.ndarray, gain: float, exposure_time: float, dark_image: np.ndarray | None, mean_frames: np.ndarray | None) -> SCOSResult:
     if dark_image is not None:
         frame = frame - dark_image #i assume we use frame - avg dark image for every function need frame
     frame_windowed = reshape_window(frame, WINDOW_SIZE)
     windowed_mean = np.mean(frame_windowed, axis=0)
-    print("Windowed_mean", windowed_mean[-21:], "\n") 
 
     k_raw2 = compute_k_raw2(frame_windowed, windowed_mean)
-    k_s2 = compute_k_s2(windowed_mean, gain)
+    k_s2 = compute_k_s2(windowed_mean)
     k_r2 = compute_k_r2(windowed_mean, dark_image)
-    k_sp2 = compute_k_sp2(frame, frame_buf, gain)
+    k_sp2 = compute_k_sp2(mean_frames)
+    if k_sp2 is None:
+        k_sp2 = np.zeros_like(k_raw2)
     k_q2 = compute_k_q2(windowed_mean)
     k_f2 = compute_k_f2(k_raw2, k_s2, k_r2, k_sp2, k_q2)
 
@@ -83,19 +83,19 @@ def compute_k_raw2(frame_windowed, windowed_mean) -> np.ndarray:
     #     return (K_raw_squared)
 
     windowed_var = np.var(frame_windowed, axis=0)
-    K_raw_squared = windowed_var / windowed_mean
+    K_raw_squared = np.where(windowed_mean != 0, windowed_var / windowed_mean, np.nan)
 
     return K_raw_squared
 
 
-def compute_k_s2(windowed_mean, gain: float) -> np.ndarray | None:
+def compute_k_s2(windowed_mean) -> np.ndarray | None:
     # MATLAB REFERENCE:
         # this is K_s_squared
         # gain = get_gain() # we should know what is the gain of the camera here
         # Ks2 = Gain./(windowed_mean);
         # return (Ks2)
     
-    Ks2 = GAIN / windowed_mean
+    Ks2 = np.where(windowed_mean != 0, GAIN / windowed_mean, np.nan)
     return Ks2
 
 
@@ -110,17 +110,16 @@ def compute_k_r2(windowed_mean, dark_image: np.ndarray | None) -> np.ndarray | N
         #     Kr2 = (mean(windowed_variance_dark) - 1/12)./((windowed_mean.^2))
 
     if dark_image is None:
-        print("Dark image is None at function compute Kr2")
         return np.zeros_like(windowed_mean)
     
     dark_windowed = reshape_window(dark_image, WINDOW_SIZE)
     windowed_variance_dark = np.var(dark_windowed, axis=0) # per window varriance
-    Kr2 = (np.mean(windowed_variance_dark) - 1/12) / np.square(windowed_mean)
+    Kr2 = np.where(windowed_mean != 0, (np.mean(windowed_variance_dark) - 1/12) / np.square(windowed_mean), np.nan)
     
     return Kr2
 
 
-def compute_k_sp2(frame: np.ndarray, frame_buf: deque, gain: float) -> np.ndarray | None:
+def compute_k_sp2(mean_frames: np.ndarray | None) -> np.ndarray | None:
     # MATLAB REFERENCE:
     # # this is Ksp2
     # # here the previous_frames hold <50 previous frames right before the current frame; I don't want to hold too many frames in the memory
@@ -136,21 +135,15 @@ def compute_k_sp2(frame: np.ndarray, frame_buf: deque, gain: float) -> np.ndarra
     #     Ksp2 = spatial_variance./(spatial_mean.^2);
     # return (Ksp2)
 
-    # in pipeline i already set frame buf = 50 size which contain 50 images
-    if len(frame_buf) < 50:
-        n_windows = (frame.shape[0] // WINDOW_SIZE) * (frame.shape[1] // WINDOW_SIZE)
-        return np.zeros(n_windows)
+    if mean_frames is None:
+        return None
 
-    frames_50 = np.array(list(frame_buf)) #(50, H, W)
-
-    mean_50_frames = np.mean(frames_50, axis=0)
-    mean_50_frames_windowed = reshape_window(mean_50_frames, WINDOW_SIZE) 
-
-    spatial_variance = np.var(mean_50_frames_windowed, axis=0)
-    spatial_mean = np.mean(mean_50_frames_windowed, axis=0)
+    mean_frames_windowed = reshape_window(mean_frames, WINDOW_SIZE)
+    spatial_variance = np.var(mean_frames_windowed, axis=0)
+    spatial_mean = np.mean(mean_frames_windowed, axis=0)
     spatial_variance = spatial_variance - (GAIN * spatial_mean) / 50
 
-    Ksp2 = spatial_variance / np.square(spatial_mean)
+    Ksp2 = np.where(spatial_mean != 0, spatial_variance / np.square(spatial_mean), np.nan)
 
     return Ksp2
 
@@ -164,7 +157,7 @@ def compute_k_q2(windowed_mean) -> np.ndarray | None:
     # Kq2 = 1/12./((windowed_mean.^2));
     # return (Kq2)
 
-    Kq2 = (1/12) / np.square(windowed_mean)
+    Kq2 = np.where(windowed_mean != 0, (1/12) / np.square(windowed_mean), np.nan)
     
     return Kq2
 
@@ -191,21 +184,16 @@ def compute_k2(k_f2: np.ndarray | None) -> float:
     # MATLAB REFERENCE:
     # k2 = mean(Kf2)
     if k_f2 is None:
-        print("k_f2 is none")
         return 0.0
-    
-    k2 = float(np.mean(k_f2))
-    return k2
+    return float(np.nanmean(k_f2))
 
 
 def compute_bfi(k_f2: np.ndarray | None) -> float:
     # MATLAB REFERENCE:
     # BFI = 1 / mean(Kf2)
-    if k_f2 is None or np.mean(k_f2) == 0: #zero divsion check
-        print("k_f2 is none or mean is 0")
+    if k_f2 is None:
         return 0.0
-    BFI = float(1 / np.mean(k_f2))
-    return BFI
+    return float(1 / np.nanmean(k_f2))
 
 
 def compute_cc(windowed_mean) -> float:
