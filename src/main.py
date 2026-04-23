@@ -1,6 +1,6 @@
 # Usage:
-#   python main.py                        # production (Basler camera)
-#   python main.py --debug video.avi      # debug (loops video file)
+#   python main.py # production (Basler camera)
+#   python main.py --debug video.avi # debug (loops video file)
 #
 
 import sys
@@ -36,7 +36,7 @@ def main():
 
     dpg.create_viewport(
         title = "SCOS Data Acquisition",
-        width  = VIEWPORT_W,
+        width = VIEWPORT_W,
         height = VIEWPORT_H,
         min_width = VIEWPORT_MIN_W,
         min_height= VIEWPORT_MIN_H,

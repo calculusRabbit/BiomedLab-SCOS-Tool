@@ -28,4 +28,4 @@ class CameraSession:
     def reset(self, start_time: float) -> None:
         self.data.clear()
         self.data.start_time = start_time
-        self.pipeline.reset_temporal_buffer()
+        self.pipeline.reset_processor()

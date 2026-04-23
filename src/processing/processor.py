@@ -1,34 +1,58 @@
 import numpy as np
+
+from config import TEMPORAL_BUFFER_SIZE
 from processing.scos_result import SCOSResult
+from processing.temporal_buffer import TemporalBuffer
 
-WINDOW_SIZE = 7  # default window size (pixels)
-GAIN = 0.3755 # default gain use this for all computation
-
-def process_all_data(frame: np.ndarray, gain: float, exposure_time: float, dark_image: np.ndarray | None, mean_frames: np.ndarray | None) -> SCOSResult:
-    if dark_image is not None:
-        frame = frame - dark_image #i assume we use frame - avg dark image for every function need frame
-    frame_windowed = reshape_window(frame, WINDOW_SIZE)
-    windowed_mean = np.mean(frame_windowed, axis=0)
-
-    k_raw2 = compute_k_raw2(frame_windowed, windowed_mean)
-    k_s2 = compute_k_s2(windowed_mean)
-    k_r2 = compute_k_r2(windowed_mean, dark_image)
-    k_sp2 = compute_k_sp2(mean_frames)
-    if k_sp2 is None:
-        k_sp2 = np.zeros_like(k_raw2)
-    k_q2 = compute_k_q2(windowed_mean)
-    k_f2 = compute_k_f2(k_raw2, k_s2, k_r2, k_sp2, k_q2)
-
-    return SCOSResult(
-        k2 = compute_k2(k_f2),
-        bfi = compute_bfi(k_f2),
-        cc = compute_cc(windowed_mean),
-        od = compute_od(windowed_mean),
-        k2_images = (k_raw2, k_s2, k_r2, k_sp2, k_q2, k_f2),
-    )
+WINDOW_SIZE = 7
+GAIN = 0.3755 # fixed for all computations
 
 
-# spatial windowing
+class Processor:
+
+    def __init__(self):
+        self._temporal_buf = TemporalBuffer() # for store 50 lastest image
+        self._windowed_mean_initial: np.ndarray | None = None
+
+    def process(self, frame: np.ndarray, dark_image: np.ndarray | None) -> SCOSResult:
+        # Temporal buffer gets the raw frame (before dark subtraction)
+        mean_frames = self._temporal_buf.update(frame)
+
+        if dark_image is not None:
+            frame = frame - dark_image  # i assume we use frame - avg dark image for every function need frame
+
+        frame_windowed = reshape_window(frame, WINDOW_SIZE)
+        windowed_mean = np.mean(frame_windowed, axis=0)
+
+        # Reset baseline if ROI changed (shape mismatch) — mirrors TemporalBuffer's shape check
+        if self._windowed_mean_initial is not None and windowed_mean.shape != self._windowed_mean_initial.shape:
+            self._windowed_mean_initial = None
+
+        # Capture baseline on first frame after each reset or ROI change
+        if self._windowed_mean_initial is None:
+            self._windowed_mean_initial = windowed_mean
+
+        k_raw2 = compute_k_raw2(frame_windowed, windowed_mean)
+        k_s2 = compute_k_s2(windowed_mean)
+        k_r2 = compute_k_r2(windowed_mean, dark_image)
+        k_sp2 = compute_k_sp2(mean_frames)
+        if k_sp2 is None:
+            k_sp2 = np.zeros_like(k_raw2)
+        k_q2 = compute_k_q2(windowed_mean)
+        k_f2 = compute_k_f2(k_raw2, k_s2, k_r2, k_sp2, k_q2)
+
+        return SCOSResult(
+            k2 = compute_k2(k_f2),
+            bfi = compute_bfi(k_f2),
+            cc = compute_cc(windowed_mean),
+            od = compute_od(windowed_mean, self._windowed_mean_initial),
+            k2_images = (k_raw2, k_s2, k_r2, k_sp2, k_q2, k_f2),
+        )
+
+    def reset(self) -> None:
+        self._temporal_buf.reset()
+        self._windowed_mean_initial = None
+
 
 def reshape_window(img: np.ndarray, window_size: int) -> np.ndarray:
 
@@ -59,13 +83,7 @@ def reshape_window(img: np.ndarray, window_size: int) -> np.ndarray:
     img = img.reshape(nh, window_size, nw, window_size)
     # transpose to (nh, nw, window_size, window_size) then flatten patches
     img = img.transpose(0, 2, 1, 3).reshape(nh * nw, window_size * window_size)
-    return img.T   # (window_size^2, n_windows) — column = one window
-
-
-# May be needed later to reshape windowed output back to 2D spatial map (nh, nw) for display.
-# def window_output_shape(img: np.ndarray, window_size: int):
-#     # Return (nh, nw) the spatial dimensions of the windowed output map
-#     return img.shape[0] // window_size, img.shape[1] // window_size
+    return img.T   # (pixels_per_window, n_windows)
 
 
 ## K^2 component functions ##
@@ -82,24 +100,23 @@ def compute_k_raw2(frame_windowed, windowed_mean) -> np.ndarray:
     #     # here the size of K_raw_squared should be 7 times smaller than the frame
     #     return (K_raw_squared)
 
-    windowed_var = np.var(frame_windowed, axis=0)
+    windowed_var  = np.var(frame_windowed, axis=0)
     K_raw_squared = np.where(windowed_mean != 0, windowed_var / windowed_mean, np.nan)
-
     return K_raw_squared
 
 
-def compute_k_s2(windowed_mean) -> np.ndarray | None:
+def compute_k_s2(windowed_mean) -> np.ndarray:
     # MATLAB REFERENCE:
         # this is K_s_squared
         # gain = get_gain() # we should know what is the gain of the camera here
         # Ks2 = Gain./(windowed_mean);
         # return (Ks2)
-    
+
     Ks2 = np.where(windowed_mean != 0, GAIN / windowed_mean, np.nan)
     return Ks2
 
 
-def compute_k_r2(windowed_mean, dark_image: np.ndarray | None) -> np.ndarray | None:
+def compute_k_r2(windowed_mean, dark_image: np.ndarray | None) -> np.ndarray:
     # MATLAB REFERENCE:
         # this is Kr2
         #     window_size = 7
@@ -110,12 +127,12 @@ def compute_k_r2(windowed_mean, dark_image: np.ndarray | None) -> np.ndarray | N
         #     Kr2 = (mean(windowed_variance_dark) - 1/12)./((windowed_mean.^2))
 
     if dark_image is None:
+        print("dark image is None")
         return np.zeros_like(windowed_mean)
-    
+
     dark_windowed = reshape_window(dark_image, WINDOW_SIZE)
-    windowed_variance_dark = np.var(dark_windowed, axis=0) # per window varriance
+    windowed_variance_dark = np.var(dark_windowed, axis=0)  # per window variance
     Kr2 = np.where(windowed_mean != 0, (np.mean(windowed_variance_dark) - 1/12) / np.square(windowed_mean), np.nan)
-    
     return Kr2
 
 
@@ -141,14 +158,13 @@ def compute_k_sp2(mean_frames: np.ndarray | None) -> np.ndarray | None:
     mean_frames_windowed = reshape_window(mean_frames, WINDOW_SIZE)
     spatial_variance = np.var(mean_frames_windowed, axis=0)
     spatial_mean = np.mean(mean_frames_windowed, axis=0)
-    spatial_variance = spatial_variance - (GAIN * spatial_mean) / 50
+    spatial_variance = spatial_variance - (GAIN * spatial_mean) / TEMPORAL_BUFFER_SIZE
 
     Ksp2 = np.where(spatial_mean != 0, spatial_variance / np.square(spatial_mean), np.nan)
-
     return Ksp2
 
 
-def compute_k_q2(windowed_mean) -> np.ndarray | None:
+def compute_k_q2(windowed_mean) -> np.ndarray:
     # MATLAB REFERENCE:
     # # this is Kq2
     # window_size = 7
@@ -157,18 +173,11 @@ def compute_k_q2(windowed_mean) -> np.ndarray | None:
     # Kq2 = 1/12./((windowed_mean.^2));
     # return (Kq2)
 
-    Kq2 = np.where(windowed_mean != 0, (1/12) / np.square(windowed_mean), np.nan)
-    
+    Kq2 = np.where(windowed_mean != 0, (1.0 / 12.0) / np.square(windowed_mean), np.nan)
     return Kq2
 
 
-def compute_k_f2(
-    k_raw2: np.ndarray | None,
-    k_s2: np.ndarray | None,
-    k_r2: np.ndarray | None,
-    k_sp2: np.ndarray | None,
-    k_q2: np.ndarray | None,
-) -> np.ndarray | None:
+def compute_k_f2(k_raw2: np.ndarray, k_s2: np.ndarray, k_r2: np.ndarray, k_sp2: np.ndarray, k_q2: np.ndarray) -> np.ndarray:
 
     # MATLAB REFERENCE:
     # Kf2 = Kraw2 - Ks2 - Kr2 - Kq2 - Ksp2
@@ -178,32 +187,42 @@ def compute_k_f2(
     return Kf2
 
 
-
 ## 4 plots on the right panel ##
-def compute_k2(k_f2: np.ndarray | None) -> float:
+def compute_k2(k_f2: np.ndarray) -> float:
     # MATLAB REFERENCE:
     # k2 = mean(Kf2)
-    if k_f2 is None:
-        return 0.0
     return float(np.nanmean(k_f2))
 
 
-def compute_bfi(k_f2: np.ndarray | None) -> float:
+def compute_bfi(k_f2: np.ndarray) -> float:
     # MATLAB REFERENCE:
     # BFI = 1 / mean(Kf2)
-    if k_f2 is None:
+
+    mean = float(np.nanmean(k_f2))
+    if mean == 0.0 or np.isnan(mean):
+        print("mean is 0 or nan at bfi function")
         return 0.0
-    return float(1 / np.nanmean(k_f2))
+    return 1.0 / mean
 
 
 def compute_cc(windowed_mean) -> float:
     # MATLAB REFERENCE:
     # cc = windowed_mean
 
-    return float(np.mean(windowed_mean))
+    cc = float(np.nanmean(windowed_mean))
+    return cc
 
 
-def compute_od(windowed_mean) -> float:
+def compute_od(windowed_mean: np.ndarray, windowed_mean_initial: np.ndarray | None) -> float:
     # MATLAB REFERENCE:
     # OD = -log10(abs(windowed_mean) ./ (ones(nTpts,1) * windowed_mean(1)))
-    return 0.0  # TODO: needs windowed_mean_initial from first frame
+    #
+    # windowed_mean_initial = windowed_mean of the very first frame after reset (the baseline)
+    # ones(nTpts,1) * windowed_mean(1) is MATLAB broadcasting — in numpy just divide directly
+
+    if windowed_mean_initial is None:
+        return 0.0
+
+    ratio = np.where(windowed_mean_initial != 0, windowed_mean / windowed_mean_initial, np.nan)
+    od = -np.log10(np.abs(ratio))
+    return float(np.nanmean(od))

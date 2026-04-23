@@ -2,10 +2,12 @@ from collections import deque
 
 import numpy as np
 
+from config import TEMPORAL_BUFFER_SIZE
+
 
 class TemporalBuffer:
 
-    def __init__(self, max_frames: int = 50):
+    def __init__(self, max_frames: int = TEMPORAL_BUFFER_SIZE):
         self._max_frames = max_frames
         self._buf: deque[np.ndarray] = deque(maxlen=max_frames)
         self._running_sum: np.ndarray | None = None

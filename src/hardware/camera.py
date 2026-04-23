@@ -23,7 +23,7 @@ class Camera(BaseCamera):
             result = []
             
             for i, d in enumerate(devices):
-                result.append(f"Basler [{i}] {d.GetModelName()}")
+                result.append(f"Basler [{i}] {d.GetModelName()} | SN:{d.GetSerialNumber()}")
 
             return result
         except Exception as e:
@@ -51,7 +51,7 @@ class Camera(BaseCamera):
         try:
             grab = self._camera.RetrieveResult(5000, pylon.TimeoutHandling_ThrowException)
             if grab.GrabSucceeded():
-                frame = grab.Array
+                frame = grab.Array.copy()
                 grab.Release()
                 return frame
             grab.Release()
@@ -72,11 +72,13 @@ class Camera(BaseCamera):
             self._camera.Gain.Value = value
 
     def get_gain(self) -> float:
-        return self._camera.Gain.Value
+        if self._camera and self._camera.IsOpen():
+            return self._camera.Gain.Value
 
     def set_exposure_time(self, value: float) -> None:
         if self._camera and self._camera.IsOpen():
             self._camera.ExposureTime.Value = value
 
     def get_exposure_time(self) -> float:
-        return self._camera.ExposureTime.Value
+        if self._camera and self._camera.IsOpen():
+            return self._camera.ExposureTime.Value

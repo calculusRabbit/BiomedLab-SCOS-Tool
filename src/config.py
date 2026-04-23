@@ -23,8 +23,11 @@ TEXTURE_H = 1200
 K2_TEXTURE_W = 2**7 #128
 K2_TEXTURE_H = 2**7
 
+# Temporal buffer — number of frames averaged for K_sp² computation
+TEMPORAL_BUFFER_SIZE = 50
+
 # Scrolling plot
-MAX_PLOT_POINTS = 1000 # change to None for inifinity
+MAX_PLOT_POINTS = 200
 PLOT_WINDOW_SEC = 10.0
 
 # UI layout
@@ -40,6 +43,10 @@ HANDLE_RADIUS = 6
 # Camera defaults
 CAMERA_DEFAULT_GAIN = 10.0
 CAMERA_DEFAULT_EXPOSURE = 20000.0
+
+# Temporary dark image path - replace with UI file picker when dark capture window is built.
+# Set to None to disable dark subtraction.
+DARK_IMAGE_PATH: str | None = None
 
 # Add a new ROI by adding one entry here — name: RGBA color tuple.
 # The default position for each ROI lives in state/roi_set.py _DEFAULTS.
