@@ -24,14 +24,10 @@ def crop_frame(frame: np.ndarray, roi_pixels: tuple[int, int, int, int]) -> np.n
 
 
 def to_display_texture(img: np.ndarray, w: int, h: int) -> np.ndarray:
-
-    # Prepare a grayscale image for DearPyGUI raw texture display.
-
-    # Steps: resize -> normalize to 0.0–1.0 -> convert to flat RGB float32 array.
-
-    # Returns flat float32 array of length w * h * 3, ready for dpg.set_value()
-    
-    img = cv2.resize(img.astype(np.float32), (w, h))
+    # Resize -> normalize to [0, 1] -> flat float32 RGB for dpg.set_value().
+    # NaN values (from zero-mean windows) are zeroed before resize so cv2 behaves correctly.
+    img = np.nan_to_num(img, nan=0.0).astype(np.float32)
+    img = cv2.resize(img, (w, h))
     mn, mx = img.min(), img.max()
     if mx > mn:
         img = (img - mn) / (mx - mn)

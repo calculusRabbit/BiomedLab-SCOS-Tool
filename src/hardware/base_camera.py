@@ -22,6 +22,13 @@ class BaseCamera(ABC):
     def grab_frame(self) -> np.ndarray | None:
         """Return the latest grayscale frame as a (H, W) uint array, or None on failure"""
 
+    @abstractmethod
+    def get_gain(self) -> float:
+        """Return the current gain value"""
+
+    @abstractmethod
+    def get_exposure_time(self) -> float:
+        """Return the current exposure time value"""
 
     def set_gain(self, value: float) -> None:
         pass
