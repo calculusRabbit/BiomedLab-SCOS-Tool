@@ -1,4 +1,7 @@
+import time
+
 import cv2
+import numpy as np
 
 from hardware.base_camera import BaseCamera
 from config import CAMERA_DEFAULT_GAIN, CAMERA_DEFAULT_EXPOSURE
@@ -24,7 +27,7 @@ class DebugCamera(BaseCamera):
         if not self._cap.isOpened():
             raise FileNotFoundError(f"Cannot open video: {self._path}")
 
-    def grab_frame(self):
+    def grab_frame(self) -> tuple[np.ndarray, int | None, int | None] | None:
         ret, frame = self._cap.read()
         if not ret:
             self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
@@ -33,7 +36,7 @@ class DebugCamera(BaseCamera):
             return None
         if frame.ndim == 3:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        return frame
+        return frame, None, None
 
     def close(self) -> None:
         if self._cap:

@@ -73,19 +73,16 @@ class UIController:
     ## render loop (called every frame from main.py) ##
 
     def update(self) -> None:
-        # Pull latest data from every connected camera (all run in parallel)
         for cam_id in self._manager.connected_ids():
             session = self._manager.get_session(cam_id)
             result  = session.pipeline.get_latest()
             if result is None:
                 continue
-
             full_frame, output = result
             session.last_frame = full_frame
             t = time.time() - session.data.start_time
             session.data.push(t, output)
 
-        # Only the active camera display the display
         active = self._manager.get_session(self._state.active_cam_id)
         if active is None:
             return
@@ -93,9 +90,8 @@ class UIController:
         if active.last_frame is not None:
             self._push_frame(active.last_frame)
 
-        if self._state.is_running and active.data:
+        if self._state.is_running:
             self._push_plots(active.data)
-
             latest = active.data.latest()
             if latest is not None:
                 self._push_k2_maps(latest)
@@ -195,6 +191,8 @@ class UIController:
 
     def _push_plots(self, data: SCOSTimeSeries) -> None:
         t, k2, bfi, cc, od = data.as_lists()
+        if not t:
+            return
         for i, series in enumerate([k2, bfi, cc, od]):
             dpg.set_value(self._ui.PLOT_SERIES_TAG[i], [t, series])
         t_max = max(PLOT_WINDOW_SEC, t[-1]) + 0.5

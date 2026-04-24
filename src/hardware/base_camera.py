@@ -19,8 +19,9 @@ class BaseCamera(ABC):
         """Release the camera and free resources"""
 
     @abstractmethod
-    def grab_frame(self) -> np.ndarray | None:
-        """Return the latest grayscale frame as a (H, W) uint array, or None on failure"""
+    def grab_frame(self) -> tuple[np.ndarray, int | None, int | None] | None:
+        """Return (frame, camera_ts_ticks, frame_counter) or None on failure.
+        camera_ts_ticks and frame_counter are None if the camera does not support chunk data."""
 
     @abstractmethod
     def get_gain(self) -> float:
@@ -35,3 +36,6 @@ class BaseCamera(ABC):
 
     def set_exposure_time(self, value: float) -> None:
         pass
+
+    def get_fps(self) -> float | None:
+        return None
