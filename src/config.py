@@ -46,7 +46,7 @@ CAMERA_DEFAULT_EXPOSURE = 20000.0
 
 # Temporary dark image path - replace with UI file picker when dark capture window is built.
 # Set to None to disable dark subtraction.
-DARK_IMAGE_PATH: str | None = None
+DARK_IMAGE_PATH: str | None = r"debug_data\average_dark_image.png"
 
 # Add a new ROI by adding one entry here — name: RGBA color tuple.
 # The default position for each ROI lives in state/roi_set.py _DEFAULTS.
