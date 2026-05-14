@@ -11,11 +11,11 @@ import time
 
 import numpy as np
 
-from config import DARK_IMAGE_PATH
+from config import DARK_IMAGE_PATH, CAMERA_PIXEL_FORMAT, CAMERA_W, CAMERA_H
 from hardware.base_camera import BaseCamera
 from processing.processor import Processor
 from processing.utils import crop_frame
-from recording.frame_writer import FrameWriter
+from recording.frame_writer import FrameWriter, FrameRecord, RecordingMeta
 
 
 class Pipeline:
@@ -34,18 +34,19 @@ class Pipeline:
         self._roi_pixels: tuple | None      = None
         self._dark_image: np.ndarray | None = None
 
-        self._writer = FrameWriter()
+        self.writer  = FrameWriter()
+        self._grab_index: int = 0
 
         self.crashed: bool = False
 
         # FPS stats — updated every 2 s, readable by the UI
         self.fps_camera: float = 0.0
         self.fps_processed: float = 0.0
-        self.drop_rate: float = 0.0
+        self.total_processed: int = 0
+        self.drop_processed: int = 0
 
         self._grabbed = 0
         self._processed = 0
-        self._process_dropped = 0  # frames dropped because process thread was busy
         self._log_time = 0.0
         self._start_time = 0.0
 
@@ -64,14 +65,14 @@ class Pipeline:
 
     def stop(self) -> None:
         self._running = False
+        self._camera.close()
         if self._grab_thread:
             self._grab_thread.join(timeout=3.0)
             self._grab_thread = None
         if self._process_thread:
             self._process_thread.join(timeout=3.0)
             self._process_thread = None
-        self._writer.stop()
-        self._camera.close()
+        self.writer.stop()
 
     # public API 
     def get_latest(self):
@@ -112,16 +113,40 @@ class Pipeline:
         self._camera.set_exposure_time(value)
 
     # RECORDING
-    def start_recording(self, output_folder: str, cam_id: str = "cam", interval_ms: float = 0.0) -> None:
-        self._writer.start(output_folder, cam_id, interval_ms)
+    def start_recording(
+        self,
+        output_folder: str,
+        cam_id: str = "cam",
+        interval_ms: float = 0.0,
+        buffer_size: int = 500,
+        study_name: str = "",
+        subject_id: str = "",
+        run_number: str = "",
+    ) -> None:
+        meta = RecordingMeta(
+            study_name=study_name,
+            subject_id=subject_id,
+            run_number=run_number,
+            camera_id=cam_id,
+            gain_db=self._camera.get_gain(),
+            exposure_us=self._camera.get_exposure_time(),
+            pixel_format=CAMERA_PIXEL_FORMAT,
+            tick_frequency_hz=self._camera.get_tick_frequency_hz(),
+            interval_ms=interval_ms,
+            camera_time_enabled=self._camera.has_camera_time(),
+            exp_end_time_enabled=self._camera.has_exp_end_time(),
+            frame_counter_enabled=self._camera.has_frame_counter(),
+            pc_start_time_unix=time.time(),
+        )
+        self.writer.start(output_folder, meta, buffer_size)
 
     def stop_recording(self) -> None:
-        self._writer.stop()
+        self.writer.stop()
 
     @property
     def recording(self) -> "FrameWriter":
-        """Expose writer stats (queue_size, dropped, is_recording, file_path) to the UI."""
-        return self._writer
+        """Expose writer stats to the UI."""
+        return self.writer
 
     # grab thread
     def _grab_loop(self) -> None:
@@ -132,17 +157,25 @@ class Pipeline:
                 if result is None:
                     continue
 
-                frame, cam_ts, frame_counter = result
+                frame, cam_ts, frame_counter, exp_end_ts = result
                 host_ts = time.time()
                 self._grabbed += 1
+                self._grab_index += 1
 
                 # record before processing — every frame, lowest latency
-                self._writer.push_frame(frame, host_ts, cam_ts, frame_counter)
+                self.writer.push_frame(FrameRecord(
+                    frame=frame,
+                    grab_index=self._grab_index,
+                    pc_time=host_ts,
+                    camera_time=cam_ts,
+                    exp_end_time=exp_end_ts,
+                    frame_counter=frame_counter,
+                ))
 
                 # replace stale frame — process thread always gets the latest
                 try:
                     self._process_queue.get_nowait()
-                    self._process_dropped += 1
+                    self.drop_processed += 1
                 except queue.Empty:
                     pass
                 self._process_queue.put_nowait((frame, host_ts))
@@ -150,9 +183,10 @@ class Pipeline:
                 self._update_stats()
 
             except Exception as e:
-                print(f"[Pipeline._grab_loop] {e}")
-                self.crashed = True
-                self._running = False
+                if self._running:  # ignore exceptions caused by intentional camera.close() in stop()
+                    print(f"[Pipeline._grab_loop] {e}")
+                    self.crashed = True
+                    self._running = False
 
     # process thread 
     def _process_loop(self) -> None:
@@ -178,6 +212,7 @@ class Pipeline:
 
                 output = self._processor.process(cropped, dark_cropped)
                 self._processed += 1
+                self.total_processed += 1
 
                 # replace stale display result - UI always gets the latest
                 try:
@@ -201,15 +236,14 @@ class Pipeline:
 
         self.fps_camera = self._grabbed / interval
         self.fps_processed = self._processed / interval
-        self.drop_rate = 100 * self._process_dropped / self._grabbed if self._grabbed else 0.0
-        elapsed = now - self._start_time
 
         print(
-            f"[Pipeline] t={elapsed:.1f}s | "
+            f"[Pipeline] t={now - self._start_time:.1f}s | "
             f"camera: {self.fps_camera:.1f} fps | "
             f"processed: {self.fps_processed:.1f} fps | "
-            f"drop rate: {self.drop_rate:.1f}%"
+            f"total: {self.total_processed} | "
+            f"dropped: {self.drop_processed}"
         )
 
-        self._grabbed = self._processed = self._process_dropped = 0
+        self._grabbed = self._processed = 0
         self._log_time = now

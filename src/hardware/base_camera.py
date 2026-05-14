@@ -19,9 +19,9 @@ class BaseCamera(ABC):
         """Release the camera and free resources"""
 
     @abstractmethod
-    def grab_frame(self) -> tuple[np.ndarray, int | None, int | None] | None:
-        """Return (frame, camera_ts_ticks, frame_counter) or None on failure.
-        camera_ts_ticks and frame_counter are None if the camera does not support chunk data."""
+    def grab_frame(self) -> tuple[np.ndarray, int | None, int | None, int | None] | None:
+        """Return (frame, cam_ts_ticks, frame_counter, exposure_end_ts) or None on failure.
+        cam_ts_ticks, frame_counter, exposure_end_ts are None if unsupported."""
 
     @abstractmethod
     def get_gain(self) -> float:
@@ -39,3 +39,15 @@ class BaseCamera(ABC):
 
     def get_fps(self) -> float | None:
         return None
+
+    def get_tick_frequency_hz(self) -> int | None:
+        return None
+
+    def has_camera_time(self) -> bool:
+        return False
+
+    def has_exp_end_time(self) -> bool:
+        return False
+
+    def has_frame_counter(self) -> bool:
+        return False

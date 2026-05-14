@@ -1,5 +1,3 @@
-import time
-
 import cv2
 import numpy as np
 
@@ -27,7 +25,7 @@ class DebugCamera(BaseCamera):
         if not self._cap.isOpened():
             raise FileNotFoundError(f"Cannot open video: {self._path}")
 
-    def grab_frame(self) -> tuple[np.ndarray, int | None, int | None] | None:
+    def grab_frame(self) -> tuple[np.ndarray, int | None, int | None, int | None] | None:
         ret, frame = self._cap.read()
         if not ret:
             self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
@@ -36,7 +34,7 @@ class DebugCamera(BaseCamera):
             return None
         if frame.ndim == 3:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        return frame, None, None
+        return frame, None, None, None
 
     def close(self) -> None:
         if self._cap:
@@ -55,3 +53,9 @@ class DebugCamera(BaseCamera):
 
     def get_exposure_time(self) -> float:
         return self._exposure_time
+
+    def get_fps(self) -> float | None:
+        if self._cap and self._cap.isOpened():
+            fps = self._cap.get(cv2.CAP_PROP_FPS)
+            return fps if fps > 0 else None
+        return None
