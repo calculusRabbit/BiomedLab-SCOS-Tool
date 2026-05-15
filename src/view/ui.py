@@ -74,6 +74,11 @@ class SCOS_UI:
     BTN_STOP = "btn_stop"
     BTN_AUTOSCALE = "btn_fit_y"
 
+    # dark image
+    BTN_DARKIMG = "btn_darkImg"
+    BTN_DARKBROWSE = "btn_dark_Browse"
+    INP_DARKPATH = "dark_path"
+
     # K² spatial map panel
     K2_MAP_TAG = ["k2_raw", "k2_1", "k2_2", "k2_3", "k2_4", "k2_5"]
     K2_Y_AXIS_TAG = ["k2_raw/y", "k2_1/y", "k2_2/y", "k2_3/y", "k2_4/y", "k2_5/y"]
@@ -229,6 +234,18 @@ class SCOS_UI:
                     dpg.add_text("Exposure")
                     dpg.add_slider_float(tag=self.SLD_EXPOSURE, min_value=100.0, max_value=100000.0,
                                          default_value=20000.0, format="%.0f µs", width=-1)
+
+            dpg.add_separator()
+            dpg.add_text("Dark Image")
+            dpg.add_button(label="Capture Dark Image", tag=self.BTN_DARKIMG, width=-1)
+            with dpg.table(header_row=False, policy=dpg.mvTable_SizingStretchProp, pad_outerX=True):
+                dpg.add_table_column(width_fixed=True, init_width_or_weight=90)
+                dpg.add_table_column(width_stretch=True)
+                dpg.add_table_column(width_fixed=True, init_width_or_weight=55)
+                with dpg.table_row():
+                    dpg.add_text("Load from file")
+                    dpg.add_input_text(default_value="", width=-1, tag=self.INP_DARKPATH)
+                    dpg.add_button(label="Browse", width=-1, tag=self.BTN_DARKBROWSE)
 
             dpg.add_separator()
             self._recording_panel()

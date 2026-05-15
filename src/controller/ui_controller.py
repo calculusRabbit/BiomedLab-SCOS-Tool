@@ -12,6 +12,7 @@
 import time
 
 import dearpygui.dearpygui as dpg
+import numpy as np
 from tkinter import filedialog
 
 from config import (
@@ -22,6 +23,7 @@ from config import (
     ROI_CONFIGS,
 )
 from controller.camera_manager import CameraManager
+from controller.dark_capture_controller import DarkCaptureController
 from controller.roi_selector import ROISelector
 from processing.scos_result import SCOSResult
 from processing.utils import to_display_texture
@@ -39,6 +41,10 @@ class UIController:
         self._state = app_state
         self._last_size = (0, 0)
         self._rois: dict[str, ROISelector] = {}
+        self._dark_ctrl = DarkCaptureController(
+            manager, app_state,
+            lambda p: dpg.set_value(self._ui.INP_DARKPATH, p),
+        )
 
     # setup
 
@@ -58,17 +64,20 @@ class UIController:
             dpg.add_mouse_release_handler(callback=self._on_mouse_release)
 
         dpg.set_viewport_resize_callback(self._on_resize)
-        dpg.set_item_callback(self._ui.BTN_SCAN, self._on_scan)
-        dpg.set_item_callback(self._ui.BTN_CONNECT, self._on_connect)
-        dpg.set_item_callback(self._ui.BTN_PREVIEW, self._on_preview)
-        dpg.set_item_callback(self._ui.BTN_START, self._on_rec_start)
-        dpg.set_item_callback(self._ui.BTN_STOP, self._on_rec_stop)
-        dpg.set_item_callback(self._ui.BTN_AUTOSCALE, self._on_autoscale)
+        dpg.set_item_callback(self._ui.BTN_SCAN,        self._on_scan)
+        dpg.set_item_callback(self._ui.BTN_CONNECT,     self._on_connect)
+        dpg.set_item_callback(self._ui.BTN_PREVIEW,     self._on_preview)
+        dpg.set_item_callback(self._ui.BTN_START,       self._on_rec_start)
+        dpg.set_item_callback(self._ui.BTN_STOP,        self._on_rec_stop)
+        dpg.set_item_callback(self._ui.BTN_AUTOSCALE,   self._on_autoscale)
         dpg.set_item_callback(self._ui.DEVICE_DROPDOWN, self._on_dropdown_change)
-        dpg.set_item_callback(self._ui.SLD_GAIN, self._on_gain_change)
-        dpg.set_item_callback(self._ui.SLD_EXPOSURE ,self._on_exposure_change)
-        dpg.set_item_callback(self._ui.BTN_REC_BROWSE, self._on_rec_browse)
+        dpg.set_item_callback(self._ui.SLD_GAIN,        self._on_gain_change)
+        dpg.set_item_callback(self._ui.SLD_EXPOSURE,    self._on_exposure_change)
+        dpg.set_item_callback(self._ui.BTN_REC_BROWSE,  self._on_rec_browse)
+        dpg.set_item_callback(self._ui.BTN_DARKIMG,     self._on_dark_open)
+        dpg.set_item_callback(self._ui.BTN_DARKBROWSE,  self._on_dark_browse)
 
+        self._dark_ctrl.setup()
         self.sync_ui()
 
     def shutdown(self) -> None:
@@ -85,6 +94,11 @@ class UIController:
             session.last_frame = full_frame
             t = time.time() - session.data.start_time
             session.data.push(t, output)
+
+            if self._dark_ctrl.is_capturing_for(cam_id):
+                self._dark_ctrl.feed_frame(full_frame)
+
+        self._dark_ctrl.update_ui()
 
         active = self._manager.get_session(self._state.active_cam_id)
         if active is None:
@@ -140,6 +154,26 @@ class UIController:
         if folder:
             dpg.set_value(self._ui.INP_REC_FOLDER, folder)
 
+    def _on_dark_open(self) -> None:
+        cam_id = self._state.active_cam_id
+        if cam_id is None:
+            return
+        self._dark_ctrl.open(cam_id)
+
+    def _on_dark_browse(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Load dark image",
+            filetypes=[("NumPy array", "*.npy"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        img = np.load(path)
+        dpg.set_value(self._ui.INP_DARKPATH, path)
+        session = self._manager.get_session(self._state.active_cam_id)
+        if session is not None:
+            session.dark_image = img
+            session.pipeline.set_dark_image(img)
+
     def _on_rec_start(self) -> None:
         folder = dpg.get_value(self._ui.INP_REC_FOLDER) or "./data"
         buffer_size = int(dpg.get_value(self._ui.INP_REC_BUFFER))
@@ -193,11 +227,12 @@ class UIController:
 
         can_record = (is_previewing and has_cameras)
 
-        dpg.configure_item(self._ui.BTN_SCAN, enabled=(not is_recording))
-        dpg.configure_item(self._ui.BTN_CONNECT, enabled=is_idle)
-        dpg.configure_item(self._ui.BTN_PREVIEW, enabled=is_connected)
-        dpg.configure_item(self._ui.BTN_START, enabled=can_record)
-        dpg.configure_item(self._ui.BTN_STOP, enabled=is_recording)
+        dpg.configure_item(self._ui.BTN_SCAN,     enabled=(not is_recording))
+        dpg.configure_item(self._ui.BTN_CONNECT,  enabled=is_idle)
+        dpg.configure_item(self._ui.BTN_PREVIEW,  enabled=is_connected)
+        dpg.configure_item(self._ui.BTN_START,    enabled=can_record)
+        dpg.configure_item(self._ui.BTN_STOP,     enabled=is_recording)
+        dpg.configure_item(self._ui.BTN_DARKIMG,  enabled=(not is_idle))
 
 
 
@@ -255,6 +290,8 @@ class UIController:
     # mouse events
 
     def _on_mouse_down(self, s, a) -> None:
+        if self._state.camera_state == CameraState.RECORDING:
+            return
         mx, my = self._local_mouse()
         if self._is_over_drawlist(mx, my):
             for roi in self._rois.values():

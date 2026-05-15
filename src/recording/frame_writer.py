@@ -54,9 +54,9 @@ class RecordingMeta:
     pc_start_time_unix: float  # time.time() at recording start
 
 
-CHUNK         = 128     # frames per HDF5 chunk and write batch
+CHUNK = 128     # frames per HDF5 chunk and write batch
 INITIAL_ALLOC = 50000  # initial pre-allocated frames (~8 min at 100 fps)
-RESIZE_STEP   = 10000  # grow by this many frames when buffer overflows
+RESIZE_STEP = 10000  # grow by this many frames when buffer overflows
 
 
 class FrameWriter:
@@ -224,7 +224,7 @@ class FrameWriter:
         print(f"[FrameWriter] buffer extended to {new_size} frames")
 
     def flush(self, file, ds, batch, bufs: WriteBuffers):
-        n   = len(batch)
+        n = len(batch)
         pos = self.write_pos
 
         if pos + n > self.allocated:
@@ -268,10 +268,10 @@ class FrameWriter:
         h, w = frame_shape
         n = INITIAL_ALLOC
 
-        scalar = dict(shape=(n,), maxshape=(None,), chunks=(CHUNK,), compression="lzf")
+        scalar = dict(shape=(n,), maxshape=(None,), chunks=(CHUNK,))
         return {
             "frames": file.create_dataset("frames", shape=(n, h, w), maxshape=(None, h, w),
-                                          chunks=(CHUNK, h, w), dtype=frame_dtype, compression="lzf"),
+                                          chunks=(CHUNK, h, w), dtype=frame_dtype),
             "pc_time": file.create_dataset("pc_time", dtype="float64", **scalar),
             "camera_time": file.create_dataset("camera_time", dtype="int64", **scalar),
             "exp_end_time": file.create_dataset("exp_end_time", dtype="int64", **scalar),
