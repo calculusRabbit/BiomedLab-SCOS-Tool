@@ -39,15 +39,28 @@ class SCOS_UI:
     BTN_CONNECT = "btn_connect"
 
     INPUT_STUDY = "inp_study"
-    BTN_CREATE = "btn_create"
-    STUDY_DROPDOWN = "dd_study"
     INPUT_SUBJECT = "inp_subject"
     INPUT_RUN = "inp_run"
-    RATE_SLIDER = "sld_rate"
 
     # Camera parameter controls
     SLD_GAIN = "sld_gain"
     SLD_EXPOSURE = "sld_exposure"
+
+    # Recording panel
+    INP_REC_FOLDER = "inp_rec_folder"
+    BTN_REC_BROWSE = "btn_rec_browse"
+    INP_REC_BUFFER = "inp_rec_buffer"
+    INP_REC_INTERVAL = "inp_rec_interval"
+    REC_CAM_GROUP = "rec_cam_group"
+    REC_STATUS    = "rec_status"
+
+    FPS_CAM = "num_fps_cam"
+    FPS_PROCESSED = "num_fps_processed"
+    TOTAL_PROCESSED = "total_processed"
+
+    QUEUE_SAVING = "queue_saving"
+    DROPPED_FRAMEs_SAVING = "drop_frame_recording"
+
 
     LIVE_TEXTURE = "tex_live"
     LIVE_IMAGE = "img_live"
@@ -58,6 +71,15 @@ class SCOS_UI:
     BTN_PAUSE = "btn_pause"
     BTN_STOP = "btn_stop"
     BTN_AUTOSCALE = "btn_fit_y"
+
+    # trigger source
+    TRIGGER_DROPDOWN = "dd_trigger"
+    BTN_TRIGGER_CONNECT = "btn_trigger_connect"
+
+    # dark image
+    BTN_DARKIMG = "btn_darkImg"
+    BTN_DARKBROWSE = "btn_dark_Browse"
+    INP_DARKPATH = "dark_path"
 
     # K² spatial map panel
     K2_MAP_TAG = ["k2_raw", "k2_1", "k2_2", "k2_3", "k2_4", "k2_5"]
@@ -180,29 +202,15 @@ class SCOS_UI:
             with dpg.table(header_row=False, policy=dpg.mvTable_SizingStretchProp, pad_outerX=True):
                 dpg.add_table_column(width_fixed=True, init_width_or_weight=90)
                 dpg.add_table_column(width_stretch=True)
-                dpg.add_table_column(width_fixed=True, init_width_or_weight=75)
                 with dpg.table_row():
                     dpg.add_text("Study Name")
                     dpg.add_input_text(tag=self.INPUT_STUDY, width=-1)
-                    dpg.add_button(label="Create", tag=self.BTN_CREATE, width=-1)
-
-            with dpg.table(header_row=False, policy=dpg.mvTable_SizingStretchProp, pad_outerX=True):
-                dpg.add_table_column(width_fixed=True, init_width_or_weight=90)
-                dpg.add_table_column(width_stretch=True)
-                with dpg.table_row():
-                    dpg.add_text("Current Study")
-                    dpg.add_combo([], tag=self.STUDY_DROPDOWN, width=-1,
-                                  height_mode=dpg.mvComboHeight_Largest)
                 with dpg.table_row():
                     dpg.add_text("Subject ID")
                     dpg.add_input_text(tag=self.INPUT_SUBJECT, width=-1)
                 with dpg.table_row():
                     dpg.add_text("Run Number")
                     dpg.add_input_text(tag=self.INPUT_RUN, width=-1)
-                with dpg.table_row():
-                    dpg.add_text("Sampling Rate")
-                    dpg.add_slider_int(tag=self.RATE_SLIDER, min_value=10, max_value=100,
-                                       default_value=30, format="%d Hz", width=-1)
 
             dpg.add_separator()
 
@@ -219,9 +227,79 @@ class SCOS_UI:
                     dpg.add_slider_float(tag=self.SLD_EXPOSURE, min_value=100.0, max_value=100000.0,
                                          default_value=20000.0, format="%.0f µs", width=-1)
 
+            dpg.add_separator()
+            dpg.add_text("Dark Image")
+            dpg.add_button(label="Capture Dark Image", tag=self.BTN_DARKIMG, width=-1)
+            with dpg.table(header_row=False, policy=dpg.mvTable_SizingStretchProp, pad_outerX=True):
+                dpg.add_table_column(width_fixed=True, init_width_or_weight=90)
+                dpg.add_table_column(width_stretch=True)
+                dpg.add_table_column(width_fixed=True, init_width_or_weight=55)
+                with dpg.table_row():
+                    dpg.add_text("Load from file")
+                    dpg.add_input_text(default_value="", width=-1, tag=self.INP_DARKPATH)
+                    dpg.add_button(label="Browse", width=-1, tag=self.BTN_DARKBROWSE)
+
+            dpg.add_separator()
+            self._recording_panel()
+
+    def _recording_panel(self) -> None:
+        dpg.add_text("Recording")
+
+        # camera checkboxes — populated dynamically after scan
+        dpg.add_group(tag=self.REC_CAM_GROUP, horizontal=False)
+
+        with dpg.table(header_row=False, policy=dpg.mvTable_SizingStretchProp, pad_outerX=True):
+            dpg.add_table_column(width_fixed=True, init_width_or_weight=150)
+            dpg.add_table_column(width_stretch=True)
+            dpg.add_table_column(width_fixed=True, init_width_or_weight=55)
+            with dpg.table_row():
+                dpg.add_text("Recording buffer size:")
+                dpg.add_input_int(tag=self.INP_REC_BUFFER, default_value=1000,
+                                  min_value=1, min_clamped=True, width=-1)
+                dpg.add_text("frames")
+            with dpg.table_row():
+                dpg.add_text("Record a frame every:")
+                dpg.add_input_int(tag=self.INP_REC_INTERVAL, default_value=0,
+                                  min_value=0, min_clamped=True, width=-1)
+                dpg.add_text("ms")
+
+        with dpg.table(header_row=False, policy=dpg.mvTable_SizingStretchProp, pad_outerX=True):
+            dpg.add_table_column(width_fixed=True, init_width_or_weight=55)
+            dpg.add_table_column(width_stretch=True)
+            dpg.add_table_column(width_fixed=True, init_width_or_weight=55)
+            with dpg.table_row():
+                dpg.add_text("Folder")
+                dpg.add_input_text(tag=self.INP_REC_FOLDER, default_value="./data", width=-1)
+                dpg.add_button(label="Browse", tag=self.BTN_REC_BROWSE, width=-1)
+
+        with dpg.table(header_row=False, policy=dpg.mvTable_SizingStretchProp, pad_outerX=True):
+            dpg.add_table_column(width_fixed=True, init_width_or_weight=75)
+            dpg.add_table_column(width_stretch=True)
+            dpg.add_table_column(width_fixed=True, init_width_or_weight=75)
+            dpg.add_table_column(width_stretch=True)
+            with dpg.table_row():
+                dpg.add_text("Cam FPS")
+                dpg.add_text("--", tag=self.FPS_CAM)
+                dpg.add_text("Queue")
+                dpg.add_text("--", tag=self.QUEUE_SAVING)
+            with dpg.table_row():
+                dpg.add_text("Proc FPS")
+                dpg.add_text("--", tag=self.FPS_PROCESSED)
+                dpg.add_text("Dropped")
+                dpg.add_text("--", tag=self.DROPPED_FRAMEs_SAVING)
+            with dpg.table_row():
+                dpg.add_text("Frames")
+                dpg.add_text("--", tag=self.TOTAL_PROCESSED)
+                dpg.add_text("")
+                dpg.add_text("")
+
+
+
     def _roi_panel(self, lo: _Layout) -> None:
         with dpg.child_window(width=-1, height=-1, border=True, no_scrollbar=True):
-            dpg.add_text("ROI Selection")
+            with dpg.group(horizontal=True):
+                dpg.add_text("ROI Selection")
+                dpg.add_text("", tag=self.REC_STATUS)
             with dpg.texture_registry(show=False):
                 blank = np.zeros(TEXTURE_W * TEXTURE_H * 3, dtype="f")
                 dpg.add_raw_texture(width=TEXTURE_W, height=TEXTURE_H,
@@ -248,8 +326,8 @@ class SCOS_UI:
         with dpg.child_window(width=-1, height=lo.trigger_bar_h, border=True, no_scrollbar=True):
             with dpg.group(horizontal=True):
                 dpg.add_text("Trigger source:")
-                dpg.add_combo([], width=100)
-                dpg.add_button(label="Connect")
+                dpg.add_combo([], tag=self.TRIGGER_DROPDOWN, width=100)
+                dpg.add_button(label="Connect", tag=self.BTN_TRIGGER_CONNECT)
                 dpg.add_text("Time scale:")
                 dpg.add_input_int(default_value=0, width=100)
                 dpg.add_button(label="Auto Scale (Fit Y)", tag=self.BTN_AUTOSCALE)

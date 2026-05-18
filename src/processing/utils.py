@@ -8,6 +8,16 @@ import cv2
 import numpy as np
 
 
+def safe_filename(name: str) -> str:
+    chars = []
+    for char in name:
+        if char.isalnum() or char in "-_":
+            chars.append(char)
+        else:
+            chars.append("_")
+    return "".join(chars)
+
+
 def crop_frame(frame: np.ndarray, roi_pixels: tuple[int, int, int, int]) -> np.ndarray:
     
     ## Crop a frame to the given pixel region.
@@ -32,3 +42,20 @@ def to_display_texture(img: np.ndarray, w: int, h: int) -> np.ndarray:
     if mx > mn:
         img = (img - mn) / (mx - mn)
     return np.stack([img, img, img], axis=2).flatten()
+
+
+def to_preview_texture(img: np.ndarray, tex_w: int, tex_h: int) -> np.ndarray:
+    # Letterbox resize: preserve aspect ratio, pad remainder with black, return flat RGB float32.
+    img = np.nan_to_num(img, nan=0.0).astype(np.float32)
+    h, w = img.shape[:2]
+    scale = min(tex_w / w, tex_h / h)
+    new_w, new_h = int(w * scale), int(h * scale)
+    resized = cv2.resize(img, (new_w, new_h))
+    canvas = np.zeros((tex_h, tex_w), dtype=np.float32)
+    y_off = (tex_h - new_h) // 2
+    x_off = (tex_w - new_w) // 2
+    canvas[y_off:y_off + new_h, x_off:x_off + new_w] = resized
+    mn, mx = canvas.min(), canvas.max()
+    if mx > mn:
+        canvas = (canvas - mn) / (mx - mn)
+    return np.stack([canvas, canvas, canvas], axis=2).flatten()

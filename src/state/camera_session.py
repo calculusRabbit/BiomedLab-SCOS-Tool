@@ -21,6 +21,7 @@ class CameraSession:
         self.roi_set: ROISet= ROISet()
         self.data: SCOSTimeSeries = SCOSTimeSeries()
         self.last_frame: np.ndarray | None = None
+        self.dark_image: np.ndarray | None = None  # full-frame float32 average, set by DarkCaptureController
 
     def sync_pipeline_roi(self) -> None:
         self.pipeline.set_roi(self.roi_set.to_pixels("source"))

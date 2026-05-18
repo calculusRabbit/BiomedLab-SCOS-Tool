@@ -48,6 +48,13 @@ CAMERA_DEFAULT_EXPOSURE = 20000.0
 # Set to None to disable dark subtraction.
 DARK_IMAGE_PATH: str | None = r"debug_data\average_dark_image.png"
 
+# Recording
+RECORD_QUEUE_SIZE = 500  # max frames held in RAM (~440 MB at 1920×1200 Mono8)
+
+# Dark image capture — preview texture size inside the capture window
+DARK_PREVIEW_W = 330
+DARK_PREVIEW_H = 380
+
 # Add a new ROI by adding one entry here — name: RGBA color tuple.
 # The default position for each ROI lives in state/roi_set.py _DEFAULTS.
 ROI_CONFIGS = {

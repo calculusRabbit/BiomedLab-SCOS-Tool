@@ -15,11 +15,10 @@ class Processor:
         self._windowed_mean_initial: np.ndarray | None = None
 
     def process(self, frame: np.ndarray, dark_image: np.ndarray | None) -> SCOSResult:
-        # Temporal buffer gets the raw frame (before dark subtraction)
-        mean_frames = self._temporal_buf.update(frame)
-
         if dark_image is not None:
-            frame = frame - dark_image  # i assume we use frame - avg dark image for every function need frame
+            frame = frame.astype(np.float64) - dark_image
+
+        mean_frames = self._temporal_buf.update(frame)
 
         frame_windowed = reshape_window(frame, WINDOW_SIZE)
         windowed_mean = np.mean(frame_windowed, axis=0)
