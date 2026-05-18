@@ -1,10 +1,3 @@
-# view/dark_capture_window.py
-# Rule: no logic here — only widget construction and layout math.
-#
-# Layout: two columns side by side so everything is visible without scrolling.
-#   Left  — live preview (fixed 320×200 texture)
-#   Right — all controls (frame count, buttons, progress, save path, status)
-
 import dearpygui.dearpygui as dpg
 import numpy as np
 
@@ -14,21 +7,21 @@ from config import DARK_PREVIEW_W, DARK_PREVIEW_H
 class DarkCaptureWindow:
 
     # widget tags
-    WINDOW        = "dark_cap_win"
-    BTN_CAPTURE   = "dark_cap_btn_capture"
-    BTN_CANCEL    = "dark_cap_btn_cancel"
-    BTN_SAVE      = "dark_cap_btn_save"
-    BTN_BROWSE    = "dark_cap_btn_browse"
-    BTN_APPLY     = "dark_cap_btn_apply"
-    INP_FRAMES    = "dark_cap_inp_frames"
-    INP_PATH      = "dark_cap_inp_path"
-    PROGRESS      = "dark_cap_progress"
-    STATUS        = "dark_cap_status"
-    PREVIEW_TEX   = "dark_cap_preview_tex"
+    WINDOW = "dark_cap_win"
+    BTN_CAPTURE = "dark_cap_btn_capture"
+    BTN_CANCEL = "dark_cap_btn_cancel"
+    BTN_SAVE = "dark_cap_btn_save"
+    BTN_BROWSE = "dark_cap_btn_browse"
+    BTN_APPLY = "dark_cap_btn_apply"
+    INP_FRAMES = "dark_cap_inp_frames"
+    INP_PATH = "dark_cap_inp_path"
+    PROGRESS = "dark_cap_progress"
+    STATUS = "dark_cap_status"
+    PREVIEW_TEX = "dark_cap_preview_tex"
     PREVIEW_LABEL = "dark_cap_preview_label"
 
     # right column width drives all control widths
-    _RIGHT_W = 270
+    RIGHT_W = 270
 
     def create(self, on_close) -> None:
         blank = np.zeros(DARK_PREVIEW_W * DARK_PREVIEW_H * 3, dtype="f")
@@ -59,12 +52,12 @@ class DarkCaptureWindow:
             dpg.add_text("Live Preview", tag=self.PREVIEW_LABEL)
             with dpg.drawlist(width=DARK_PREVIEW_W, height=DARK_PREVIEW_H):
                 dpg.draw_image(
-                    self.PREVIEW_TEX,
+                    texture_tag=self.PREVIEW_TEX,
                     pmin=(0, 0), pmax=(DARK_PREVIEW_W, DARK_PREVIEW_H),
                 )
 
     def _right_column(self) -> None:
-        w = self._RIGHT_W
+        w = self.RIGHT_W
         with dpg.group():
             # frame count
             with dpg.group(horizontal=True):
@@ -76,14 +69,14 @@ class DarkCaptureWindow:
                     width=110,
                 )
 
-            dpg.add_spacer(height=4)
+            dpg.add_spacer(height=5)
 
             # capture / cancel
             with dpg.group(horizontal=True):
                 dpg.add_button(label="Capture", tag=self.BTN_CAPTURE, width=100)
-                dpg.add_button(label="Cancel",  tag=self.BTN_CANCEL,  width=100)
+                dpg.add_button(label="Cancel", tag=self.BTN_CANCEL,  width=100)
 
-            dpg.add_spacer(height=4)
+            dpg.add_spacer(height=5)
 
             # progress bar
             dpg.add_progress_bar(
@@ -94,7 +87,7 @@ class DarkCaptureWindow:
             )
 
             dpg.add_separator()
-            dpg.add_spacer(height=4)
+            dpg.add_spacer(height=5)
 
             # save path — input stretches, Browse is fixed
             dpg.add_text("Save path")
@@ -106,28 +99,28 @@ class DarkCaptureWindow:
                 )
                 dpg.add_button(label="Browse", tag=self.BTN_BROWSE, width=60)
 
-            dpg.add_spacer(height=4)
+            dpg.add_spacer(height=5)
 
             # save / apply
             with dpg.group(horizontal=True):
-                dpg.add_button(label="Save to disk",    tag=self.BTN_SAVE,  width=130)
+                dpg.add_button(label="Save to disk", tag=self.BTN_SAVE,  width=130)
                 dpg.add_button(label="Apply to camera", tag=self.BTN_APPLY, width=130)
 
-            dpg.add_spacer(height=6)
+            dpg.add_spacer(height=5)
 
             # status line
             dpg.add_text("", tag=self.STATUS)
 
     # show / hide
-
     def show(self, cam_id: str) -> None:
+        dpg.set_value(self.PREVIEW_LABEL, "Live Preview")
+        dpg.set_value(self.STATUS, "Block all light sources, then click Capture.")
         dpg.configure_item(self.WINDOW, label=f"Dark Image Capture — {cam_id}", show=True)
 
     def hide(self) -> None:
         dpg.configure_item(self.WINDOW, show=False)
 
     # per-tick updates
-
     def update_preview(self, flat_rgb: np.ndarray) -> None:
         dpg.set_value(self.PREVIEW_TEX, flat_rgb)
 

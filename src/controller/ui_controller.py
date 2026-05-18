@@ -87,6 +87,9 @@ class UIController:
     def update(self) -> None:
         for cam_id in self._manager.connected_ids():
             session = self._manager.get_session(cam_id)
+            if session.pipeline.crashed:
+                self._on_pipeline_crash(cam_id)
+                continue
             result  = session.pipeline.get_latest()
             if result is None:
                 continue
@@ -175,11 +178,15 @@ class UIController:
             session.pipeline.set_dark_image(img)
 
     def _on_rec_start(self) -> None:
+        study_name = dpg.get_value(self._ui.INPUT_STUDY).strip()
+        subject_id = dpg.get_value(self._ui.INPUT_SUBJECT).strip()
+        if not study_name or not subject_id:
+            dpg.set_value(self._ui.REC_STATUS, "  Study Name and Subject ID required")
+            return
+
         folder = dpg.get_value(self._ui.INP_REC_FOLDER) or "./data"
         buffer_size = int(dpg.get_value(self._ui.INP_REC_BUFFER))
         interval_ms = float(dpg.get_value(self._ui.INP_REC_INTERVAL))
-        study_name = dpg.get_value(self._ui.INPUT_STUDY)
-        subject_id = dpg.get_value(self._ui.INPUT_SUBJECT)
         run_number = dpg.get_value(self._ui.INPUT_RUN)
 
         for cam_id in self._manager.connected_ids():
@@ -215,6 +222,19 @@ class UIController:
             self._state.record_cam_ids.discard(cam_id)
         self.sync_ui()
 
+    def _on_pipeline_crash(self, cam_id: str) -> None:
+        print(f"[UIController] pipeline crash detected: {cam_id}")
+        session = self._manager.get_session(cam_id)
+        session.pipeline.stop()
+        session.is_connected = False
+        for cid in self._manager.connected_ids():
+            s = self._manager.get_session(cid)
+            if s:
+                s.pipeline.stop_recording()
+        self._state.camera_state = CameraState.IDLE
+        dpg.set_value(self._ui.REC_STATUS, f"  ⚠ Camera error — please rescan")
+        self.sync_ui()
+
     # state machine
     def sync_ui(self) -> None:
         state = self._state.camera_state
@@ -246,8 +266,7 @@ class UIController:
 
         dpg.set_value(self._ui.FPS_CAM, f"{p.fps_camera:.1f} fps")
         dpg.set_value(self._ui.FPS_PROCESSED, f"{p.fps_processed:.1f} fps")
-        dpg.set_value(self._ui.TOTAL_PROCESSED,str(p.total_processed))
-        dpg.set_value(self._ui.DROP_FRAME_PROCESSING, str(p.drop_processed))
+        dpg.set_value(self._ui.TOTAL_PROCESSED, str(p.total_processed))
         dpg.set_value(self._ui.QUEUE_SAVING, str(p.recording.queue_size))
         dpg.set_value(self._ui.DROPPED_FRAMEs_SAVING, str(p.recording.dropped))
 

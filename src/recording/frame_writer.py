@@ -7,6 +7,8 @@ from pathlib import Path
 import h5py
 import numpy as np
 
+from processing.utils import safe_filename
+
 
 @dataclass
 class WriteBuffers:
@@ -114,7 +116,9 @@ class FrameWriter:
         self.running = False
         self.queue.put(None)  # tells write loop to drain and exit
         if self.thread:
-            self.thread.join()
+            self.thread.join(timeout=10.0)
+            if self.thread.is_alive():
+                print("[FrameWriter] warning: write thread did not exit cleanly")
             self.thread = None
         print("[FrameWriter] stopped")
 
@@ -282,13 +286,7 @@ class FrameWriter:
     def recording_path(self):
         m = self.meta
 
-        chars = []
-        for char in m.camera_id:
-            if char.isalnum() or char in "-_":
-                chars.append(char)
-            else:
-                chars.append("_")
-        safe_cam = "".join(chars)
+        safe_cam = safe_filename(m.camera_id)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename  = f"run_{m.run_number}_{safe_cam}_{timestamp}.h5"

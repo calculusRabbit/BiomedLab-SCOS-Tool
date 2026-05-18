@@ -8,6 +8,16 @@ import cv2
 import numpy as np
 
 
+def safe_filename(name: str) -> str:
+    chars = []
+    for char in name:
+        if char.isalnum() or char in "-_":
+            chars.append(char)
+        else:
+            chars.append("_")
+    return "".join(chars)
+
+
 def crop_frame(frame: np.ndarray, roi_pixels: tuple[int, int, int, int]) -> np.ndarray:
     
     ## Crop a frame to the given pixel region.

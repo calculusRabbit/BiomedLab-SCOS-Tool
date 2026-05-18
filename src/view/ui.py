@@ -39,8 +39,6 @@ class SCOS_UI:
     BTN_CONNECT = "btn_connect"
 
     INPUT_STUDY = "inp_study"
-    BTN_CREATE = "btn_create"
-    STUDY_DROPDOWN = "dd_study"
     INPUT_SUBJECT = "inp_subject"
     INPUT_RUN = "inp_run"
 
@@ -59,7 +57,7 @@ class SCOS_UI:
     FPS_CAM = "num_fps_cam"
     FPS_PROCESSED = "num_fps_processed"
     TOTAL_PROCESSED = "total_processed"
-    DROP_FRAME_PROCESSING = "drop_frames"
+
     QUEUE_SAVING = "queue_saving"
     DROPPED_FRAMEs_SAVING = "drop_frame_recording"
 
@@ -200,19 +198,9 @@ class SCOS_UI:
             with dpg.table(header_row=False, policy=dpg.mvTable_SizingStretchProp, pad_outerX=True):
                 dpg.add_table_column(width_fixed=True, init_width_or_weight=90)
                 dpg.add_table_column(width_stretch=True)
-                dpg.add_table_column(width_fixed=True, init_width_or_weight=75)
                 with dpg.table_row():
                     dpg.add_text("Study Name")
                     dpg.add_input_text(tag=self.INPUT_STUDY, width=-1)
-                    dpg.add_button(label="Create", tag=self.BTN_CREATE, width=-1)
-
-            with dpg.table(header_row=False, policy=dpg.mvTable_SizingStretchProp, pad_outerX=True):
-                dpg.add_table_column(width_fixed=True, init_width_or_weight=90)
-                dpg.add_table_column(width_stretch=True)
-                with dpg.table_row():
-                    dpg.add_text("Current Study")
-                    dpg.add_combo([], tag=self.STUDY_DROPDOWN, width=-1,
-                                  height_mode=dpg.mvComboHeight_Largest)
                 with dpg.table_row():
                     dpg.add_text("Subject ID")
                     dpg.add_input_text(tag=self.INPUT_SUBJECT, width=-1)
@@ -253,30 +241,26 @@ class SCOS_UI:
     def _recording_panel(self) -> None:
         dpg.add_text("Recording")
 
-        # camera checkboxes — populated dynamically by controller after scan
-
+        # camera checkboxes — populated dynamically after scan
         dpg.add_group(tag=self.REC_CAM_GROUP, horizontal=False)
 
         with dpg.table(header_row=False, policy=dpg.mvTable_SizingStretchProp, pad_outerX=True):
             dpg.add_table_column(width_fixed=True, init_width_or_weight=150)
             dpg.add_table_column(width_stretch=True)
-            dpg.add_table_column(width_fixed=True, init_width_or_weight=90)
+            dpg.add_table_column(width_fixed=True, init_width_or_weight=55)
             with dpg.table_row():
                 dpg.add_text("Recording buffer size:")
                 dpg.add_input_int(tag=self.INP_REC_BUFFER, default_value=1000,
                                   min_value=1, min_clamped=True, width=-1)
-                dpg.add_text("frame(s)")
+                dpg.add_text("frames")
             with dpg.table_row():
                 dpg.add_text("Record a frame every:")
                 dpg.add_input_int(tag=self.INP_REC_INTERVAL, default_value=0,
                                   min_value=0, min_clamped=True, width=-1)
-                dpg.add_text("Milisecond(s)")
-
-        dpg.add_text("                        FPS = 1000 / ms per frame")
-
+                dpg.add_text("ms")
 
         with dpg.table(header_row=False, policy=dpg.mvTable_SizingStretchProp, pad_outerX=True):
-            dpg.add_table_column(width_fixed=True, init_width_or_weight=90)
+            dpg.add_table_column(width_fixed=True, init_width_or_weight=55)
             dpg.add_table_column(width_stretch=True)
             dpg.add_table_column(width_fixed=True, init_width_or_weight=55)
             with dpg.table_row():
@@ -285,31 +269,24 @@ class SCOS_UI:
                 dpg.add_button(label="Browse", tag=self.BTN_REC_BROWSE, width=-1)
 
         with dpg.table(header_row=False, policy=dpg.mvTable_SizingStretchProp, pad_outerX=True):
+            dpg.add_table_column(width_fixed=True, init_width_or_weight=75)
             dpg.add_table_column(width_stretch=True)
+            dpg.add_table_column(width_fixed=True, init_width_or_weight=75)
             dpg.add_table_column(width_stretch=True)
             with dpg.table_row():
                 dpg.add_text("Cam FPS")
-                dpg.add_text("Save queue")
-            with dpg.table_row():
                 dpg.add_text("--", tag=self.FPS_CAM)
+                dpg.add_text("Queue")
                 dpg.add_text("--", tag=self.QUEUE_SAVING)
             with dpg.table_row():
                 dpg.add_text("Proc FPS")
-                dpg.add_text("Save dropped")
-            with dpg.table_row():
                 dpg.add_text("--", tag=self.FPS_PROCESSED)
+                dpg.add_text("Dropped")
                 dpg.add_text("--", tag=self.DROPPED_FRAMEs_SAVING)
             with dpg.table_row():
-                dpg.add_text("Processed")
-                dpg.add_text("")
-            with dpg.table_row():
+                dpg.add_text("Frames")
                 dpg.add_text("--", tag=self.TOTAL_PROCESSED)
                 dpg.add_text("")
-            with dpg.table_row():
-                dpg.add_text("Dropped")
-                dpg.add_text("")
-            with dpg.table_row():
-                dpg.add_text("--", tag=self.DROP_FRAME_PROCESSING)
                 dpg.add_text("")
 
 
