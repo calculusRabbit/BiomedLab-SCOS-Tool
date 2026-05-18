@@ -64,18 +64,19 @@ class UIController:
             dpg.add_mouse_release_handler(callback=self._on_mouse_release)
 
         dpg.set_viewport_resize_callback(self._on_resize)
-        dpg.set_item_callback(self._ui.BTN_SCAN,        self._on_scan)
-        dpg.set_item_callback(self._ui.BTN_CONNECT,     self._on_connect)
-        dpg.set_item_callback(self._ui.BTN_PREVIEW,     self._on_preview)
-        dpg.set_item_callback(self._ui.BTN_START,       self._on_rec_start)
-        dpg.set_item_callback(self._ui.BTN_STOP,        self._on_rec_stop)
-        dpg.set_item_callback(self._ui.BTN_AUTOSCALE,   self._on_autoscale)
+        dpg.set_item_callback(self._ui.BTN_SCAN, self._on_scan)
+        dpg.set_item_callback(self._ui.BTN_CONNECT, self._on_connect)
+        dpg.set_item_callback(self._ui.BTN_PREVIEW, self._on_preview)
+        dpg.set_item_callback(self._ui.BTN_START, self._on_rec_start)
+        dpg.set_item_callback(self._ui.BTN_STOP, self._on_rec_stop)
+        dpg.set_item_callback(self._ui.BTN_AUTOSCALE, self._on_autoscale)
         dpg.set_item_callback(self._ui.DEVICE_DROPDOWN, self._on_dropdown_change)
-        dpg.set_item_callback(self._ui.SLD_GAIN,        self._on_gain_change)
-        dpg.set_item_callback(self._ui.SLD_EXPOSURE,    self._on_exposure_change)
-        dpg.set_item_callback(self._ui.BTN_REC_BROWSE,  self._on_rec_browse)
-        dpg.set_item_callback(self._ui.BTN_DARKIMG,     self._on_dark_open)
-        dpg.set_item_callback(self._ui.BTN_DARKBROWSE,  self._on_dark_browse)
+        dpg.set_item_callback(self._ui.SLD_GAIN, self._on_gain_change)
+        dpg.set_item_callback(self._ui.SLD_EXPOSURE, self._on_exposure_change)
+        dpg.set_item_callback(self._ui.BTN_REC_BROWSE, self._on_rec_browse)
+        dpg.set_item_callback(self._ui.BTN_DARKIMG, self._on_dark_open)
+        dpg.set_item_callback(self._ui.BTN_DARKBROWSE, self._on_dark_browse)
+        dpg.set_item_callback(self._ui.BTN_TRIGGER_CONNECT, self._on_trigger_connect)
 
         self._dark_ctrl.setup()
         self.sync_ui()
@@ -126,7 +127,22 @@ class UIController:
         self._rebuild_rec_checkboxes(names)
         self._switch_to(names[0])
         self._state.camera_state = CameraState.IDLE
+        self._on_trigger_scan()
         self.sync_ui()
+
+    def _on_trigger_scan(self) -> None:
+        # scan for available trigger sources and update the trigger dropdown
+        pass
+
+    def _on_trigger_connect(self) -> None:
+        print("called from _on_triger_connect()")
+        # connect to selected trigger source and start listening for signal
+        pass
+
+    def _on_trigger_received(self) -> None:
+        # called when trigger signal arrives, starts recording
+        # self._on_rec_start()
+        pass
 
     def _on_connect(self) -> None:
         cam_id = self._selected_cam_id()
@@ -134,13 +150,15 @@ class UIController:
             return
         self._manager.connect(cam_id)
         self._sync_dropdown(cam_id)
-        self._state.camera_state = CameraState.CONNECTED
+        if self._state.camera_state == CameraState.IDLE:
+            self._state.camera_state = CameraState.CONNECTED
         self.sync_ui()
 
     def _on_dropdown_change(self) -> None:
         cam_id = self._selected_cam_id()
         if cam_id and cam_id != self._state.active_cam_id:
             self._switch_to(cam_id)
+            self.sync_ui()
 
     def _on_preview(self) -> None:
         connected = self._manager.connected_ids()
@@ -247,8 +265,11 @@ class UIController:
 
         can_record = (is_previewing and has_cameras)
 
+        active_session = self._manager.get_session(self._state.active_cam_id)
+        active_connected = active_session is not None and active_session.is_connected
+
         dpg.configure_item(self._ui.BTN_SCAN,     enabled=(not is_recording))
-        dpg.configure_item(self._ui.BTN_CONNECT,  enabled=is_idle)
+        dpg.configure_item(self._ui.BTN_CONNECT,  enabled=(not active_connected and not is_recording))
         dpg.configure_item(self._ui.BTN_PREVIEW,  enabled=is_connected)
         dpg.configure_item(self._ui.BTN_START,    enabled=can_record)
         dpg.configure_item(self._ui.BTN_STOP,     enabled=is_recording)

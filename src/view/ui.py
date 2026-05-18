@@ -72,6 +72,10 @@ class SCOS_UI:
     BTN_STOP = "btn_stop"
     BTN_AUTOSCALE = "btn_fit_y"
 
+    # trigger source
+    TRIGGER_DROPDOWN = "dd_trigger"
+    BTN_TRIGGER_CONNECT = "btn_trigger_connect"
+
     # dark image
     BTN_DARKIMG = "btn_darkImg"
     BTN_DARKBROWSE = "btn_dark_Browse"
@@ -322,8 +326,8 @@ class SCOS_UI:
         with dpg.child_window(width=-1, height=lo.trigger_bar_h, border=True, no_scrollbar=True):
             with dpg.group(horizontal=True):
                 dpg.add_text("Trigger source:")
-                dpg.add_combo([], width=100)
-                dpg.add_button(label="Connect")
+                dpg.add_combo([], tag=self.TRIGGER_DROPDOWN, width=100)
+                dpg.add_button(label="Connect", tag=self.BTN_TRIGGER_CONNECT)
                 dpg.add_text("Time scale:")
                 dpg.add_input_int(default_value=0, width=100)
                 dpg.add_button(label="Auto Scale (Fit Y)", tag=self.BTN_AUTOSCALE)
