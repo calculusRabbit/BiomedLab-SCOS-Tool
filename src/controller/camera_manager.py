@@ -4,33 +4,38 @@ from state.camera_session import CameraSession
 
 
 class CameraManager:
+    # Creates and tracks all camera sessions for the current scan.
 
-    # Creates, tracks down camera sessions
-
+    # Each call to scan() wipes the previous sessions and builds new ones
+    # from whatever cameras are physically connected at that moment.
+    # The controller talks to individual cameras through their sessions.
 
     def __init__(self, camera_class: type[BaseCamera]):
-        self._camera_cls                          = camera_class
-        self._sessions: dict[str, CameraSession] = {}
-        self._scan_list: list[str]               = []
+        self._camera_cls = camera_class
+        self._sessions: dict[str, CameraSession]  = {}
+        self._display_names: dict[str, str] = {}  # serial -> display_name
 
-    ## public API 
-
+    ## public API
     @property
-    def scan_list(self) -> list[str]:
-        return list(self._scan_list)
+    def scan_list(self) -> list[tuple[str, str]]:
+        result = []
+        for serial in self._sessions:
+            result.append((serial, self._display_names[serial]))
+        return result
 
-    def scan(self) -> list[str]:
-        #Stop all existing sessions, discover devices, create fresh sessions
+    def scan(self) -> list[tuple[str, str]]:
         for session in self._sessions.values():
             session.pipeline.stop()
         self._sessions = {}
-        self._scan_list = self._camera_cls.scan()
+        self._display_names = {}
 
-        for i, cam_id in enumerate(self._scan_list):
-            pipeline = Pipeline(self._camera_cls(i))
-            self._sessions[cam_id] = CameraSession(cam_id, pipeline)
+        for serial, model in self._camera_cls.scan():
+            display_name = f"{model} | SN:{serial}"
+            pipeline = Pipeline(self._camera_cls(serial))
+            self._sessions[serial] = CameraSession(serial, pipeline)
+            self._display_names[serial] = display_name
 
-        return self._scan_list
+        return self.scan_list
 
     def connect(self, cam_id: str) -> CameraSession | None:
         session = self._sessions.get(cam_id)

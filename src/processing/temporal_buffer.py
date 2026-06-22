@@ -6,6 +6,11 @@ from config import TEMPORAL_BUFFER_SIZE
 
 
 class TemporalBuffer:
+    # Keeps a rolling average of the last N frames.
+    # Used to compute K_sp^2, which needs the mean of the previous 50 frames.
+    # Returns None until the buffer is full (warmup period).
+    # Uses a running sum so we only do one add and one subtract per frame
+    # instead of summing all N frames from scratch every time.
 
     def __init__(self, max_frames: int = TEMPORAL_BUFFER_SIZE):
         self._max_frames = max_frames
@@ -14,7 +19,8 @@ class TemporalBuffer:
         self._frame_count: int = 0
 
     def update(self, frame: np.ndarray) -> np.ndarray | None:
-        frame = frame.astype(np.float64)
+        # returns the rolling mean once we have enough frames, None during warmup
+        frame = frame.astype(np.float64, copy=False)
 
         if self._running_sum is not None and frame.shape != self._running_sum.shape:
             self._buf.clear()

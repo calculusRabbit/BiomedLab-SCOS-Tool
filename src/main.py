@@ -1,7 +1,11 @@
-# Usage:
-#   python main.py # production (Basler camera)
-#   python main.py --debug video.avi # debug (loops video file)
+# Entry point for the SCOS data acquisition app.
 #
+# Usage:
+#   python main.py                        # production (Basler camera)
+#   python main.py --debug path/to/frames # debug mode, loops PNG frames from a folder
+#
+# Startup order matters: UI widgets must be created before the viewport is shown,
+# then state and hardware objects are created, then everything is wired together.
 
 import sys
 import dearpygui.dearpygui as dpg
@@ -15,9 +19,10 @@ from config import VIEWPORT_W, VIEWPORT_H, VIEWPORT_MIN_W, VIEWPORT_MIN_H
 
 
 def main():
+    # swap in a fake camera that replays PNG files, useful for testing without hardware
     if "--debug" in sys.argv:
         from hardware.debug_cam import DebugCamera
-        DebugCamera.video_paths = sys.argv[2:]
+        DebugCamera.folder_paths = sys.argv[2:]
         camera_class = DebugCamera
     else:
         from hardware.camera import Camera
@@ -45,6 +50,7 @@ def main():
     dpg.show_viewport()
     dpg.set_primary_window(SCOS_UI.MAIN_WINDOW, True)
 
+    # main render loop, controller.update() pulls new frames and refreshes the UI each tick
     while dpg.is_dearpygui_running():
         controller.update()
         dpg.render_dearpygui_frame()

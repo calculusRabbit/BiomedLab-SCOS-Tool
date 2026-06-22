@@ -5,18 +5,21 @@ from processing.scos_result import SCOSResult
 from processing.temporal_buffer import TemporalBuffer
 
 WINDOW_SIZE = 7
-GAIN = 0.3755 # fixed for all computations
+GAIN = 0.3755  # SCOS calibration constant — fixed per Dr. Gao 2026-05-29. Not related to camera gain slider. Do not derive from slider.
 
 
 class Processor:
 
     def __init__(self):
-        self._temporal_buf = TemporalBuffer() # for store 50 lastest image
+        self._temporal_buf = TemporalBuffer()
         self._windowed_mean_initial: np.ndarray | None = None
+        self._dark_ref: np.ndarray | None = None
+        self._dark_variance: np.ndarray | None = None
 
     def process(self, frame: np.ndarray, dark_image: np.ndarray | None) -> SCOSResult:
+        frame = frame.astype(np.float64)
         if dark_image is not None:
-            frame = frame.astype(np.float64) - dark_image
+            frame = frame - dark_image
 
         mean_frames = self._temporal_buf.update(frame)
 
@@ -33,7 +36,7 @@ class Processor:
 
         k_raw2 = compute_k_raw2(frame_windowed, windowed_mean)
         k_s2 = compute_k_s2(windowed_mean)
-        k_r2 = compute_k_r2(windowed_mean, dark_image)
+        k_r2 = compute_k_r2(windowed_mean, self._update_dark_cache(dark_image))
         k_sp2 = compute_k_sp2(mean_frames)
         if k_sp2 is None:
             k_sp2 = np.zeros_like(k_raw2)
@@ -48,9 +51,22 @@ class Processor:
             k2_images = (k_raw2, k_s2, k_r2, k_sp2, k_q2, k_f2),
         )
 
+    def _update_dark_cache(self, dark_image: np.ndarray | None) -> np.ndarray | None:
+        if dark_image is self._dark_ref:
+            return self._dark_variance
+        self._dark_ref = dark_image
+        if dark_image is None:
+            self._dark_variance = None
+        else:
+            dark_windowed = reshape_window(dark_image, WINDOW_SIZE)
+            self._dark_variance = np.var(dark_windowed, axis=0)
+        return self._dark_variance
+
     def reset(self) -> None:
         self._temporal_buf.reset()
         self._windowed_mean_initial = None
+        self._dark_ref      = None
+        self._dark_variance = None
 
 
 def reshape_window(img: np.ndarray, window_size: int) -> np.ndarray:
@@ -78,7 +94,7 @@ def reshape_window(img: np.ndarray, window_size: int) -> np.ndarray:
     nh = h // window_size
     # crop so dimensions are exact multiples of window_size
     img = img[:nh * window_size, :nw * window_size].astype(np.float64)
-    # reshape into patches: (nh, window_size, nw, window_size)
+    # reshape into: (nh, window_size, nw, window_size)
     img = img.reshape(nh, window_size, nw, window_size)
     # transpose to (nh, nw, window_size, window_size) then flatten patches
     img = img.transpose(0, 2, 1, 3).reshape(nh * nw, window_size * window_size)
@@ -99,7 +115,7 @@ def compute_k_raw2(frame_windowed, windowed_mean) -> np.ndarray:
     #     # here the size of K_raw_squared should be 7 times smaller than the frame
     #     return (K_raw_squared)
 
-    windowed_var  = np.var(frame_windowed, axis=0)
+    windowed_var = np.var(frame_windowed, axis=0)
     K_raw_squared = np.where(windowed_mean != 0, windowed_var / windowed_mean, np.nan)
     return K_raw_squared
 
@@ -115,23 +131,22 @@ def compute_k_s2(windowed_mean) -> np.ndarray:
     return Ks2
 
 
-def compute_k_r2(windowed_mean, dark_image: np.ndarray | None) -> np.ndarray:
+def compute_k_r2(windowed_mean, dark_variance: np.ndarray | None) -> np.ndarray:
     # MATLAB REFERENCE:
         # this is Kr2
-        #     window_size = 7
-        #     frame_windowed = reshapeWindow(frame,window_size)
-        #     windowed_mean = np.mean(frame_windowed,1)
         #     dark_windowed = reshapeWindow(average_dark_img,window_size)
         #     windowed_variance_dark = np.var(dark_windowed)
         #     Kr2 = (mean(windowed_variance_dark) - 1/12)./((windowed_mean.^2))
+        # dark_variance is pre-computed by Processor._update_dark_cache() — not recomputed each frame
 
-    if dark_image is None:
-        print("dark image is None")
+    if dark_variance is None:
         return np.zeros_like(windowed_mean)
 
-    dark_windowed = reshape_window(dark_image, WINDOW_SIZE)
-    windowed_variance_dark = np.var(dark_windowed, axis=0)  # per window variance
-    Kr2 = np.where(windowed_mean != 0, (np.mean(windowed_variance_dark) - 1/12) / np.square(windowed_mean), np.nan)
+    Kr2 = np.where(
+        windowed_mean != 0,
+        (np.mean(dark_variance) - 1/12) / np.square(windowed_mean),
+        np.nan,
+    )
     return Kr2
 
 

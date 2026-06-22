@@ -27,9 +27,11 @@ class ROISelector:
         self._display_h = float(display_h)
         self._visible = True
         self._color = color
+        self._name = name
 
         # unique DearPyGUI tags per instance = prevents collisions with multiple ROIs
         self._tag_rect = f"{name}_rect"
+        self._tag_label = f"{name}_label"
         self._tag_handles = {
             "tl": f"{name}_tl",
             "tr": f"{name}_tr",
@@ -53,12 +55,14 @@ class ROISelector:
     def show(self) -> None:
         self._visible = True
         dpg.configure_item(self._tag_rect, show=True)
+        dpg.configure_item(self._tag_label, show=True)
         for tag in self._tag_handles.values():
             dpg.configure_item(tag, show=True)
 
     def hide(self) -> None:
         self._visible = False
         dpg.configure_item(self._tag_rect, show=False)
+        dpg.configure_item(self._tag_label, show=False)
         for tag in self._tag_handles.values():
             dpg.configure_item(tag, show=False)
 
@@ -132,6 +136,11 @@ class ROISelector:
             pmin=(x1, y1), pmax=(x2, y2),
             color=self._color, tag=self._tag_rect, parent=self._drawlist,
         )
+        dpg.draw_text(
+            pos=(x1 + 4, y1 - 18), text=self._name,
+            color=self._color, size=16,
+            tag=self._tag_label, parent=self._drawlist,
+        )
         for key, (cx, cy) in self._corners().items():
             dpg.draw_circle(
                 center=(cx, cy), radius=HANDLE_RADIUS,
@@ -141,6 +150,7 @@ class ROISelector:
 
     def _redraw(self) -> None:
         dpg.configure_item(self._tag_rect, pmin=(self._x1, self._y1), pmax=(self._x2, self._y2))
+        dpg.configure_item(self._tag_label, pos=(self._x1 + 4, self._y1 - 18))
         for key, (cx, cy) in self._corners().items():
             dpg.configure_item(self._tag_handles[key], center=(cx, cy))
 

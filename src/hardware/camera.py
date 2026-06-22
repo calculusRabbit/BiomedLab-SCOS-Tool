@@ -1,5 +1,3 @@
-from collections import deque
-
 import numpy as np
 from pypylon import pylon, genicam
 
@@ -7,69 +5,57 @@ from hardware.base_camera import BaseCamera
 from config import CAMERA_PIXEL_FORMAT, CAMERA_DEFAULT_GAIN, CAMERA_DEFAULT_EXPOSURE
 
 
-class _ExposureEndHandler(pylon.CameraEventHandler):
-    # Receives ExposureEnd events from the camera in pypylon's callback thread.
-    # Timestamps are pushed into a deque.
-    # grab_frame() pops from the front safe because the event always arrives
-    # before the corresponding frame (Basler hardware guarantee).
-
-    def __init__(self):
-        super().__init__()
-        self._ts_queue: deque[int] = deque(maxlen=50)
-
-    def OnCameraEvent(self, camera, user_id, node):
-        try:
-            if genicam.IsReadable(camera.EventExposureEndTimestamp):
-                self._ts_queue.append(camera.EventExposureEndTimestamp.Value)
-        except Exception:
-            pass
-
-
 class Camera(BaseCamera):
+    # Handles opening/closing the camera, configuring pixel format and exposure,
+    # and grabbing frames with hardware timestamps and frame counters via chunk data.
+    # Chunk data gives us per-frame metadata directly from the camera hardware,
+    # which is more accurate than relying on PC timestamps alone.
 
-    def __init__(self, index: int = 0):
+    def __init__(self, serial: str):
         self._camera = None
-        self._index = index
+        self._serial = serial
+        self._model = ""
         self._has_chunk_ts: bool = False
         self._has_chunk_fc: bool = False
-        self._has_exp_event: bool = False
-        self._exp_handler: _ExposureEndHandler | None = None
+        self._chunk_fc_attr: str | None = None
 
     @classmethod
-    def scan(cls) -> list[str]:
+    def scan(cls) -> list[tuple[str, str]]:
         try:
             tl = pylon.TlFactory.GetInstance()
             devices = tl.EnumerateDevices()
             if not devices:
                 print("[Camera.scan] no cameras found")
                 return []
-            return [f"Basler [{i}] {d.GetModelName()} | SN:{d.GetSerialNumber()}"
-                    for i, d in enumerate(devices)]
+            result = []
+            for d in devices:
+                result.append((d.GetSerialNumber(), d.GetModelName()))
+            return result
         except Exception as e:
             print(f"[Camera.scan] {e}")
             return []
 
     def open(self) -> None:
-        try:
-            tl_factory = pylon.TlFactory.GetInstance()
-            devices = tl_factory.EnumerateDevices()
-            if not devices:
-                raise RuntimeError("No camera found")
-            self._camera = pylon.InstantCamera(tl_factory.CreateDevice(devices[self._index]))
-        except Exception:
-            print("[Camera.open] EnumerateDevices failed, trying CreateFirstDevice...")
-            self._camera = pylon.InstantCamera(pylon.TlFactory.GetInstance().CreateFirstDevice())
-
+        tl_factory = pylon.TlFactory.GetInstance()
+        devices = tl_factory.EnumerateDevices()
+        if not devices:
+            raise RuntimeError("No Basler cameras found")
+        device = next((d for d in devices if d.GetSerialNumber() == self._serial), None)
+        if device is None:
+            raise RuntimeError(f"Camera SN:{self._serial} not found — may have been disconnected")
+        self._model = device.GetModelName()
+        self._camera = pylon.InstantCamera(tl_factory.CreateDevice(device))
         self._camera.Open()
         self._camera.PixelFormat.Value = CAMERA_PIXEL_FORMAT
         self._camera.ExposureTime.Value = CAMERA_DEFAULT_EXPOSURE
         self._camera.Gain.Value = CAMERA_DEFAULT_GAIN
         self._camera.MaxNumBuffer.Value = 20
         self._setup_chunks()
-        self._setup_exposure_event()
         self._camera.StartGrabbing(pylon.GrabStrategy_OneByOne)
 
     def _setup_chunks(self) -> None:
+        # chunk data embeds extra info (timestamp, frame counter, CRC) into each frame
+        # not all camera models support all chunk types, so we try each and skip on failure
         try:
             if not genicam.IsWritable(self._camera.ChunkModeActive):
                 print("[Camera] chunk mode not supported")
@@ -95,46 +81,31 @@ class Camera(BaseCamera):
                 except Exception:
                     continue
 
-            if not self._camera.IsUsb():
-                self._camera.ChunkSelector.Value = "Framecounter"
-                self._camera.ChunkEnable.Value = True
-                self._has_chunk_fc = True
-            else:
-                print("[Camera] USB camera — frame counter chunk not available")
+            # Frame counter — USB cameras use "FrameID", GigE use "Framecounter"
+            for selector, attr in [("FrameID", "ChunkFrameID"), ("Framecounter", "ChunkFramecounter")]:
+                try:
+                    self._camera.ChunkSelector.Value = selector
+                    self._camera.ChunkEnable.Value = True
+                    self._has_chunk_fc = True
+                    self._chunk_fc_attr = attr
+                    break
+                except Exception:
+                    continue
 
-            print(f"[Camera] chunks — timestamp={self._has_chunk_ts}, framecounter={self._has_chunk_fc}")
+            print(f"[Camera] chunks — timestamp={self._has_chunk_ts}, framecounter={self._has_chunk_fc} ({self._chunk_fc_attr})")
 
         except Exception as e:
             print(f"[Camera] chunk setup failed: {e}")
-
-    def _setup_exposure_event(self) -> None:
-        try:
-            if not genicam.IsAvailable(self._camera.EventSelector):
-                print("[Camera] camera events not supported")
-                return
-
-            self._camera.GrabCameraEvents.Value = True
-            self._camera.EventSelector.Value = "ExposureEnd"
-            self._camera.EventNotification.Value = "On"
-
-            self._exp_handler = _ExposureEndHandler()
-            self._camera.RegisterCameraEventHandler(
-                self._exp_handler,
-                "EventExposureEndData",
-                0,
-                pylon.RegistrationMode_ReplaceAll,
-                pylon.Cleanup_None,
-            )
-            self._has_exp_event = True
-            print("[Camera] exposure end event enabled")
-        except Exception as e:
-            print(f"[Camera] exposure end event setup failed: {e}")
 
     def grab_frame(self) -> tuple[np.ndarray, int | None, int | None, int | None] | None:
         try:
             grab = self._camera.RetrieveResult(5000, pylon.TimeoutHandling_ThrowException)
 
-            # discard corrupted frames
+            if not grab.GrabSucceeded():
+                print(f"[Camera.grab_frame] grab failed: {grab.ErrorDescription}")
+                grab.Release()
+                return None
+
             if grab.HasCRC() and not grab.CheckCRC():
                 print("[Camera.grab_frame] CRC mismatch — frame discarded")
                 grab.Release()
@@ -147,16 +118,13 @@ class Camera(BaseCamera):
                 cam_ts = grab.ChunkTimestamp.Value
 
             frame_counter = None
-            if self._has_chunk_fc and genicam.IsReadable(grab.ChunkFramecounter):
-                frame_counter = grab.ChunkFramecounter.Value
-
-            # pop matching exposure end timestamp — event always arrives before frame
-            exp_end_ts = None
-            if self._has_exp_event and self._exp_handler._ts_queue:
-                exp_end_ts = self._exp_handler._ts_queue.popleft()
+            if self._has_chunk_fc and self._chunk_fc_attr:
+                node = getattr(grab, self._chunk_fc_attr)
+                if genicam.IsReadable(node):
+                    frame_counter = node.Value
 
             grab.Release()
-            return frame, cam_ts, frame_counter, exp_end_ts
+            return frame, cam_ts, frame_counter, None
 
         except Exception as e:
             print(f"[Camera.grab_frame] {e}")
@@ -164,16 +132,19 @@ class Camera(BaseCamera):
 
     def close(self) -> None:
         try:
-            if self._has_exp_event:
-                self._camera.EventSelector.Value = "ExposureEnd"
-                self._camera.EventNotification.Value = "Off"
             if self._camera and self._camera.IsOpen():
-                if self._camera.ChunkModeActive.Value:
+                if genicam.IsWritable(self._camera.ChunkModeActive):
                     self._camera.ChunkModeActive.Value = False
                 self._camera.StopGrabbing()
                 self._camera.Close()
         except Exception as e:
             print(f"[Camera.close] {e}")
+
+    def get_serial(self) -> str:
+        return self._serial
+
+    def get_model(self) -> str:
+        return self._model
 
     def set_gain(self, value: float) -> None:
         if self._camera and self._camera.IsOpen():
@@ -196,18 +167,10 @@ class Camera(BaseCamera):
     def get_tick_frequency_hz(self) -> int | None:
         if not self._camera or not self._camera.IsOpen():
             return None
-        for node in ["GevTimestampTickFrequency", "BslTimestampFrequency"]:
-            try:
-                return int(getattr(self._camera, node).Value)
-            except Exception:
-                pass
-        return None
+        return int(1e9)
 
     def has_camera_time(self) -> bool:
         return self._has_chunk_ts
-
-    def has_exp_end_time(self) -> bool:
-        return self._has_exp_event
 
     def has_frame_counter(self) -> bool:
         return self._has_chunk_fc
@@ -215,14 +178,78 @@ class Camera(BaseCamera):
     def get_fps(self) -> float | None:
         if not self._camera or not self._camera.IsOpen():
             return None
-        for node in [
-            "BslResultingAcquisitionFrameRate",
-            "ResultingAcquisitionFrameRate",
-            "AcquisitionFrameRate",
-            "AcquisitionFrameRateAbs",
-        ]:
-            try:
-                return float(getattr(self._camera, node).Value)
-            except Exception:
-                pass
-        return None
+        try:
+            return float(self._camera.BslResultingAcquisitionFrameRate.Value)
+        except Exception:
+            return None
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GigE / ExposureEnd event support (not available on USB cameras)
+# from collections import deque
+#
+# class _ExposureEndHandler(pylon.CameraEventHandler):
+#     def __init__(self):
+#         super().__init__()
+#         self._ts_queue: deque[int] = deque(maxlen=50)
+#
+#     def OnCameraEvent(self, camera, user_id, node):
+#         try:
+#             if genicam.IsReadable(camera.EventExposureEndTimestamp):
+#                 self._ts_queue.append(camera.EventExposureEndTimestamp.Value)
+#         except Exception:
+#             pass
+#
+# In __init__:
+#     self._has_exp_event: bool = False
+#     self._exp_handler: _ExposureEndHandler | None = None
+#
+# In open(), after _setup_chunks():
+#     self._setup_exposure_event()
+#
+# def _setup_exposure_event(self) -> None:
+#     try:
+#         if not genicam.IsAvailable(self._camera.EventSelector):
+#             return
+#         if not genicam.IsWritable(self._camera.GrabCameraEvents):
+#             print("[Camera] GrabCameraEvents not writable — events unavailable on this camera")
+#             return
+#         self._camera.GrabCameraEvents.Value = True
+#         self._camera.EventSelector.Value = "ExposureEnd"
+#         self._camera.EventNotification.Value = "On"
+#         self._exp_handler = _ExposureEndHandler()
+#         self._camera.RegisterCameraEventHandler(
+#             self._exp_handler, "EventExposureEndData", 0,
+#             pylon.RegistrationMode_ReplaceAll, pylon.Cleanup_None,
+#         )
+#         self._has_exp_event = True
+#         print("[Camera] exposure end event enabled")
+#     except Exception as e:
+#         print(f"[Camera] exposure end event setup failed: {e}")
+#
+# In grab_frame(), after frame_counter:
+#     exp_end_ts = None
+#     if self._has_exp_event and self._exp_handler._ts_queue:
+#         exp_end_ts = self._exp_handler._ts_queue.popleft()
+#     return frame, cam_ts, frame_counter, exp_end_ts
+#
+# In close(), before StopGrabbing:
+#     if self._has_exp_event:
+#         self._camera.EventSelector.Value = "ExposureEnd"
+#         self._camera.EventNotification.Value = "Off"
+#
+# In has_exp_end_time():
+#     return self._has_exp_event
+# ─────────────────────────────────────────────────────────────────────────────

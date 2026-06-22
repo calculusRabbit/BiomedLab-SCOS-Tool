@@ -7,13 +7,10 @@ from processing.scos_result import SCOSResult
 
 
 class SCOSTimeSeries:
-    
-    # Rolling time-series buffers for one camera session.
+    # Rolling buffers that store the computed SCOS values over time for one camera.
 
-
-    # Designed so adding SNIRF/BIDS saving later is one method:
-    # def save_snirf(self, path)
-    
+    # Each buffer holds the last MAX_PLOT_POINTS values so the live plots
+    # always show a recent window without growing forever.
 
     def __init__(self):
         self.start_time: float = 0.0

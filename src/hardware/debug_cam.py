@@ -1,3 +1,6 @@
+import time
+from pathlib import Path
+
 import cv2
 import numpy as np
 
@@ -6,41 +9,60 @@ from config import CAMERA_DEFAULT_GAIN, CAMERA_DEFAULT_EXPOSURE
 
 
 class DebugCamera(BaseCamera):
-    # Loop a video file used for development without physical hardware camerea
+    # Fake camera that replays PNG frames from a folder at a fixed FPS.
+    # Set DebugCamera.folder_paths before instantiating, one path per camera index.
+    # Hardware timestamps and frame counters are not available, so those return None.
 
-    video_paths: list[str] = []
+    folder_paths: list[str] = []
+    target_fps: float = 30.0
 
-    def __init__(self, index: int = 0):
-        self._path = self.video_paths[index]
-        self._cap = None
-        self._gain = CAMERA_DEFAULT_GAIN
-        self._exposure_time = CAMERA_DEFAULT_EXPOSURE
+    def __init__(self, serial: str):
+        index = int(serial.split("-")[1])
+        self._serial = serial
+        self._folder = Path(self.folder_paths[index])
+        self._frames: list[Path] = []
+        self._index: int = 0
+        self._gain: float = CAMERA_DEFAULT_GAIN
+        self._exposure_time: float = CAMERA_DEFAULT_EXPOSURE
+        self._next_frame_time: float = 0.0
 
     @classmethod
-    def scan(cls) -> list[str]:
-        return [f"Debug [{i}] {p}" for i, p in enumerate(cls.video_paths)]
+    def scan(cls) -> list[tuple[str, str]]:
+        result = []
+        for i in range(len(cls.folder_paths)):
+            result.append((f"DEBUG-{i}", "DebugCamera"))
+        return result
 
     def open(self) -> None:
-        self._cap = cv2.VideoCapture(self._path)
-        if not self._cap.isOpened():
-            raise FileNotFoundError(f"Cannot open video: {self._path}")
+        self._frames = sorted(self._folder.glob("*.png"))
+        if not self._frames:
+            raise FileNotFoundError(f"No PNG files in: {self._folder}")
+        self._index = 0
+        self._next_frame_time = time.time()
 
-    def grab_frame(self) -> tuple[np.ndarray, int | None, int | None, int | None] | None:
-        ret, frame = self._cap.read()
-        if not ret:
-            self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            ret, frame = self._cap.read()
-        if not ret:
+    def grab_frame(self) -> tuple[np.ndarray, None, None, None] | None:
+        frame = cv2.imread(str(self._frames[self._index]), cv2.IMREAD_GRAYSCALE)
+        self._index = (self._index + 1) % len(self._frames)
+
+        if frame is None:
             return None
-        if frame.ndim == 3:
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+        self._next_frame_time += 1.0 / self.target_fps
+        remaining = self._next_frame_time - time.time()
+        if remaining > 0:
+            time.sleep(remaining)
+
         return frame, None, None, None
 
     def close(self) -> None:
-        if self._cap:
-            self._cap.release()
-            self._cap = None
+        self._frames = []
+        self._index = 0
 
+    def get_serial(self) -> str:
+        return self._serial
+
+    def get_model(self) -> str:
+        return "DebugCamera"
 
     def set_gain(self, value: float) -> None:
         self._gain = value
@@ -55,7 +77,4 @@ class DebugCamera(BaseCamera):
         return self._exposure_time
 
     def get_fps(self) -> float | None:
-        if self._cap and self._cap.isOpened():
-            fps = self._cap.get(cv2.CAP_PROP_FPS)
-            return fps if fps > 0 else None
-        return None
+        return self.target_fps
