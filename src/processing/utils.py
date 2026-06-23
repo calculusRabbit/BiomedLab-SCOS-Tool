@@ -1,8 +1,5 @@
-
-# No dependencies on hardware, UI, or state = safe to import anywhere
-
-# these are just helper function
-
+# General helper functions used across the app.
+# No dependencies on hardware, UI, or state so these are safe to import anywhere.
 
 import cv2
 import numpy as np

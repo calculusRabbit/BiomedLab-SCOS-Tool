@@ -55,6 +55,7 @@ class SCOS_UI:
     REC_STATUS    = "rec_status"
 
     FPS_CAM = "num_fps_cam"
+    FPS_ACQUISITION = "num_fps_acquisition"
     FPS_PROCESSED = "num_fps_processed"
     TOTAL_PROCESSED = "total_processed"
 
@@ -79,6 +80,7 @@ class SCOS_UI:
     # dark image
     BTN_DARKIMG = "btn_darkImg"
     BTN_DARKBROWSE = "btn_dark_Browse"
+    BTN_DARKCLEAR = "btn_dark_clear"
     INP_DARKPATH = "dark_path"
 
     # K² spatial map panel
@@ -234,10 +236,12 @@ class SCOS_UI:
                 dpg.add_table_column(width_fixed=True, init_width_or_weight=90)
                 dpg.add_table_column(width_stretch=True)
                 dpg.add_table_column(width_fixed=True, init_width_or_weight=55)
+                dpg.add_table_column(width_fixed=True, init_width_or_weight=50)
                 with dpg.table_row():
                     dpg.add_text("Load from file")
                     dpg.add_input_text(default_value="", width=-1, tag=self.INP_DARKPATH)
                     dpg.add_button(label="Browse", width=-1, tag=self.BTN_DARKBROWSE)
+                    dpg.add_button(label="Clear",  width=-1, tag=self.BTN_DARKCLEAR)
 
             dpg.add_separator()
             self._recording_panel()
@@ -278,15 +282,20 @@ class SCOS_UI:
             dpg.add_table_column(width_fixed=True, init_width_or_weight=75)
             dpg.add_table_column(width_stretch=True)
             with dpg.table_row():
-                dpg.add_text("Cam FPS")
-                dpg.add_text("--", tag=self.FPS_CAM)
+                dpg.add_text("Acq FPS")
+                dpg.add_text("--", tag=self.FPS_ACQUISITION)
                 dpg.add_text("Queue")
                 dpg.add_text("--", tag=self.QUEUE_SAVING)
             with dpg.table_row():
-                dpg.add_text("Proc FPS")
-                dpg.add_text("--", tag=self.FPS_PROCESSED)
+                dpg.add_text("Grabbed FPS")
+                dpg.add_text("--", tag=self.FPS_CAM)
                 dpg.add_text("Dropped")
                 dpg.add_text("--", tag=self.DROPPED_FRAMEs_SAVING)
+            with dpg.table_row():
+                dpg.add_text("Proc FPS")
+                dpg.add_text("--", tag=self.FPS_PROCESSED)
+                dpg.add_text("")
+                dpg.add_text("")
             with dpg.table_row():
                 dpg.add_text("Frames")
                 dpg.add_text("--", tag=self.TOTAL_PROCESSED)

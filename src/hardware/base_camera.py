@@ -5,10 +5,13 @@ import numpy as np
 
 class BaseCamera(ABC):
 
+    # The real Basler camera (camera.py) and the debug replay camera (debug_cam.py)
+    # both subclass this
+
     @classmethod
     @abstractmethod
-    def scan(cls) -> list[str]:
-        """ Return a list of string of device names available on this computer """
+    def scan(cls) -> list[tuple[str, str]]:
+        """Return list of (serial, model) for each available camera."""
 
     @abstractmethod
     def open(self) -> None:
@@ -36,6 +39,12 @@ class BaseCamera(ABC):
 
     def set_exposure_time(self, value: float) -> None:
         pass
+
+    def get_serial(self) -> str:
+        return ""
+
+    def get_model(self) -> str:
+        return ""
 
     def get_fps(self) -> float | None:
         return None
