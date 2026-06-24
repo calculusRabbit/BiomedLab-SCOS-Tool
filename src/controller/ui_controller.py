@@ -170,7 +170,7 @@ class UIController:
             print("got %s at time %s" % (sample[0], timestamp))
         # for save/start:
         # once we press the start button, start button function should also listen to the sample but not the timestamp here. the Start button should have its own timestamp for saving the images and we should use those timestamps for each sample value, and save it in a two column table, first col is timestamp and second col is sample string 
-
+        # something like this in start function: sample = inlet.pull_sample(); add_row_to_table(trigger_table, current_time_stamp, sample)
         pass
 
     def _on_trigger_received(self) -> None:
