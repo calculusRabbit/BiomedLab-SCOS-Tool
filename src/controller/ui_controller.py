@@ -17,6 +17,8 @@ import dearpygui.dearpygui as dpg
 import numpy as np
 from tkinter import filedialog
 
+from pylsl import StreamInlet, resolve_byprop
+
 from config import (
     TEXTURE_W, TEXTURE_H,
     PLOT_WINDOW_SEC,
@@ -152,16 +154,29 @@ class UIController:
 
     def _on_trigger_scan(self) -> None:
         # placeholder: scan for available trigger sources and populate the trigger dropdown
-        pass
+        # Vu please create a scan button for this function
+        streams = resolve_byprop("type", "Markers") # this will run until you find some streams
+        # Vu please populate the dropdown with the streams, here is one example with the first name populated
+        populate_dropdown(streams[0].name())
+        
+        
 
     def _on_trigger_connect(self) -> None:
-        # placeholder: connect to the selected trigger source and listen for signals
-        print("called from _on_trigger_connect()")
+        # create a new inlet to read from the stream
+        inlet = StreamInlet(streams[0]) # Vu here I assumed the use selected the first stream but we need to listen to what the user select
+        # for preview:
+        while True:
+            sample, timestamp = inlet.pull_sample()
+            print("got %s at time %s" % (sample[0], timestamp))
+        # for save/start:
+        # once we press the start button, start button function should also listen to the sample but not the timestamp here. the Start button should have its own timestamp for saving the images and we should use those timestamps for each sample value, and save it in a two column table, first col is timestamp and second col is sample string 
+
         pass
 
     def _on_trigger_received(self) -> None:
         # placeholder: called when a trigger signal arrives to start recording automatically
         # self._on_rec_start()
+        # i don't think we need this function
         pass
 
     def _on_connect(self) -> None:
