@@ -62,7 +62,7 @@ def _disk_estimate(manager: CameraManager, recording_ids: list[str], folder: Pat
     for cam_id in recording_ids:
         session = manager.get_session(cam_id)
         if session is not None:
-            roi = session.roi_set.to_pixels("source")
+            roi = session.roi_set.to_pixels("1")
             if roi:
                 roi_w = roi[2] - roi[0]  # x2 - x1
                 roi_h = roi[3] - roi[1]  # y2 - y1

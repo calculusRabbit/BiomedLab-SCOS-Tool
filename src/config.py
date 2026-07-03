@@ -52,8 +52,10 @@ DARK_THUMB_W = 330
 DARK_THUMB_H = 380
 
 # Add a new ROI by adding one entry here — name: RGBA color tuple.
-# The default position for each ROI lives in state/roi_set.py _DEFAULTS.
+# The displayed label is "roi_<name>". ROI "1" is the one used for
+# processing/recording. The default position for each ROI lives in
+# state/roi_set.py _DEFAULTS.
 ROI_CONFIGS = {
-    "source":   (255, 0,   0,   255),  # red
-    "detector": (0,   120, 255, 255),  # blue
+    "1": (255, 0,   0,   255),  # red
+    "2": (0,   120, 255, 255),  # blue
 }

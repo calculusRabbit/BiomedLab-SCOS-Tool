@@ -44,7 +44,7 @@ class UIController:
         self._manager = manager
         self._state = app_state
         self._last_size = (0, 0)
-        self._rois: dict[str, ROISelector] = {}  # one ROISelector per ROI name (source, detector)
+        self._rois: dict[str, ROISelector] = {}  # one ROISelector per ROI name ("1", "2")
 
         # callback so dark controller can update the path field in the main UI after saving
         self._dark_ctrl = DarkCaptureController(
@@ -225,7 +225,7 @@ class UIController:
         session = self._manager.get_session(self._state.active_cam_id)
         if session is None:
             return
-        roi = session.roi_set.to_pixels("source")
+        roi = session.roi_set.to_pixels("1")
         roi_h, roi_w = roi[3] - roi[1], roi[2] - roi[0]
         cropped = crop_frame(img, roi)
         if cropped.shape != (roi_h, roi_w):
@@ -419,9 +419,18 @@ class UIController:
         if session and session.dark_image is not None:
             return  # ROI is locked while a dark image is applied to prevent shape mismatch
         mx, my = self._local_mouse()
-        if self._is_over_drawlist(mx, my):
-            for roi in self._rois.values():
-                roi.on_mouse_down(mx, my)
+        if not self._is_over_drawlist(mx, my):
+            return
+        # give the click to the topmost (last-drawn) ROI that hits, so overlapping
+        # boxes never drag together; the hit ROI becomes the selected one
+        hit = None
+        for roi in reversed(list(self._rois.values())):
+            roi.on_mouse_down(mx, my)
+            if roi.is_dragging():
+                hit = roi
+                break
+        for roi in self._rois.values():
+            roi.set_selected(roi is hit)  # click on empty area deselects all
 
     def _on_mouse_move(self, s, a) -> None:
         mx, my = self._local_mouse()

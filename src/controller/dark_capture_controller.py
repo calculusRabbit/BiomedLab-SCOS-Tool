@@ -28,7 +28,7 @@ class DarkCaptureController:
     # Controls the dark image capture window and the frame accumulation logic.
 
     # Dark images are captured as full-frame averages over N frames,
-    # then cropped to the current source ROI before being applied to each camera session.
+    # then cropped to the current ROI "1" before being applied to each camera session.
     # The full-frame average is also saved to disk so it can be reloaded later
     # even if the ROI changes.
 
@@ -99,7 +99,7 @@ class DarkCaptureController:
         if frame is self._last_preview_frames.get(cam_id):
             return
         self._last_preview_frames[cam_id] = frame
-        roi = session.roi_set.to_pixels("source")
+        roi = session.roi_set.to_pixels("1")
         cropped = crop_frame(frame, roi)
         self._window.update_preview(cam_id, to_preview_texture(cropped, DARK_THUMB_W, DARK_THUMB_H))
 
@@ -177,7 +177,7 @@ class DarkCaptureController:
             session = self._manager.get_session(cam_id)
             if session is None:
                 continue
-            roi = session.roi_set.to_pixels("source")
+            roi = session.roi_set.to_pixels("1")
             cropped = crop_frame(result, roi) if roi else result
             session.dark_image = cropped.astype(np.float32)
             applied += 1

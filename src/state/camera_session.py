@@ -26,14 +26,14 @@ class CameraSession:
     @dark_image.setter
     def dark_image(self, img: np.ndarray | None) -> None:
         # keep a reference here AND push to the pipeline so both stay in sync
-        # important: the image must already be cropped to the source ROI before setting
+        # important: the image must already be cropped to ROI "1" before setting
         self._dark_image = img
         self.pipeline.set_dark_image(img)
 
     def sync_pipeline_roi(self) -> None:
         # push the current ROI (in sensor pixels) down to the pipeline
         # call this after connecting or after the user moves the ROI
-        self.pipeline.set_roi(self.roi_set.to_pixels("source"))
+        self.pipeline.set_roi(self.roi_set.to_pixels("1"))
 
     def reset(self, start_time: float) -> None:
         # clear accumulated plot data and reset the processor baseline
