@@ -3,7 +3,8 @@
 # Responsibilities:
 #   - Register all button/slider/mouse callbacks at startup
 #   - Drive the render loop (update() is called every frame from main.py)
-#   - Manage the camera state machine (IDLE -> CONNECTED -> PREVIEWING -> RECORDING)
+#   - Manage the camera state machine (IDLE -> CONNECTED <-> RECORDING)
+#     plus the independent preview_on flag (SCOS processing/visualization)
 #   - Push new frames, plots, and K2 maps to the UI
 #
 # Threading note: all methods here run on the main (UI) thread.
@@ -75,6 +76,7 @@ class UIController:
         dpg.set_item_callback(self._ui.BTN_SCAN, self._on_scan)
         dpg.set_item_callback(self._ui.BTN_CONNECT, self._on_connect)
         dpg.set_item_callback(self._ui.BTN_PREVIEW, self._on_preview)
+        dpg.set_item_callback(self._ui.BTN_PAUSE, self._on_pause)
         dpg.set_item_callback(self._ui.BTN_START, self._on_rec_start)
         dpg.set_item_callback(self._ui.BTN_STOP, self._on_rec_stop)
         dpg.set_item_callback(self._ui.BTN_AUTOSCALE, self._on_autoscale)
@@ -104,12 +106,15 @@ class UIController:
                 self._on_pipeline_crash(cam_id)
                 continue
 
+            # live image comes straight from the grab thread so it keeps
+            # updating even while SCOS processing is paused
+            session.last_frame = session.pipeline.latest_frame
+
             result = session.pipeline.get_latest()
             if result is None:
                 continue
 
             full_frame, output = result
-            session.last_frame = full_frame  # store for dark capture preview
 
             # t is time since preview/recording started, used as the x-axis in plots
             t = time.time() - session.data.start_time
@@ -130,11 +135,13 @@ class UIController:
         if active.last_frame is not None:
             self._push_frame(active.last_frame)
 
-        if self._state.camera_state in (CameraState.PREVIEWING, CameraState.RECORDING):
+        if self._state.preview_on:
             self._push_plots(active.data)
             latest = active.data.latest()
             if latest is not None:
                 self._push_k2_maps(latest)
+        # status panel must keep updating while recording even if preview is paused
+        if self._state.preview_on or self._state.camera_state == CameraState.RECORDING:
             self._update_rec_status()
 
     # button callbacks
@@ -173,8 +180,12 @@ class UIController:
             return
         # push the current ROI to the pipeline so it is ready before preview starts
         session.sync_pipeline_roi()
+        # if preview is already running, the new camera joins it immediately
+        if self._state.preview_on:
+            session.reset(time.time())
+            session.pipeline.set_processing(True)
         self._sync_dropdown(cam_id)
-        # only advance to CONNECTED if we are still in IDLE, do not override PREVIEWING or RECORDING
+        # only advance to CONNECTED if we are still in IDLE, do not override RECORDING
         if self._state.camera_state == CameraState.IDLE:
             self._state.camera_state = CameraState.CONNECTED
         self.sync_ui()
@@ -187,14 +198,25 @@ class UIController:
             self.sync_ui()
 
     def _on_preview(self) -> None:
-        # start live feed for all connected cameras and reset their data buffers
+        # turn on SCOS processing + visualization for all connected cameras
+        # does not touch camera_state — preview can be resumed mid-recording
         connected = self._manager.connected_ids()
         if not connected:
             return
         now = time.time()
         for cam_id in connected:
-            self._manager.get_session(cam_id).reset(now)
-        self._state.camera_state = CameraState.PREVIEWING
+            session = self._manager.get_session(cam_id)
+            session.reset(now)
+            session.pipeline.set_processing(True)
+        self._state.preview_on = True
+        self.sync_ui()
+
+    def _on_pause(self) -> None:
+        # turn off SCOS processing + visualization to free CPU
+        # recording (fed by the grab thread) continues untouched
+        for cam_id in self._manager.connected_ids():
+            self._manager.get_session(cam_id).pipeline.set_processing(False)
+        self._state.preview_on = False
         self.sync_ui()
 
     def _on_rec_browse(self) -> None:
@@ -281,7 +303,7 @@ class UIController:
         for cam_id in self._manager.connected_ids():
             session = self._manager.get_session(cam_id)
             session.pipeline.stop_recording()
-        self._state.camera_state = CameraState.PREVIEWING
+        self._state.camera_state = CameraState.CONNECTED
         dpg.set_value(self._ui.REC_STATUS, "")
         self.sync_ui()
 
@@ -310,6 +332,7 @@ class UIController:
             if s:
                 s.pipeline.stop_recording()
         self._state.camera_state = CameraState.IDLE
+        self._state.preview_on = False
         dpg.set_value(self._ui.REC_STATUS, "  Camera error, please rescan")
         self.sync_ui()
 
@@ -319,15 +342,16 @@ class UIController:
         # enable or disable buttons based on the current camera state
         # this is called after every state change so the UI always matches reality
         state = self._state.camera_state
+        preview_on = self._state.preview_on
         has_cameras = len(self._state.record_cam_ids) > 0
 
         is_idle = (state == CameraState.IDLE)
         is_connected = (state == CameraState.CONNECTED)
-        is_previewing = (state == CameraState.PREVIEWING)
         is_recording = (state == CameraState.RECORDING)
 
-        # recording requires at least one camera checkbox checked and live preview running
-        can_record = (is_previewing and has_cameras)
+        # recording requires a connected camera and at least one checkbox checked;
+        # preview (SCOS processing) is optional and independent
+        can_record = (is_connected and has_cameras)
 
         # connect button state depends on the currently selected camera in the dropdown
         active_session = self._manager.get_session(self._state.active_cam_id)
@@ -335,7 +359,8 @@ class UIController:
 
         dpg.configure_item(self._ui.BTN_SCAN, enabled=(not is_recording))
         dpg.configure_item(self._ui.BTN_CONNECT, enabled=(not active_connected and not is_recording))
-        dpg.configure_item(self._ui.BTN_PREVIEW, enabled=is_connected)
+        dpg.configure_item(self._ui.BTN_PREVIEW, enabled=(not is_idle and not preview_on))
+        dpg.configure_item(self._ui.BTN_PAUSE, enabled=preview_on)
         dpg.configure_item(self._ui.BTN_START, enabled=can_record)
         dpg.configure_item(self._ui.BTN_STOP, enabled=is_recording)
         dpg.configure_item(self._ui.BTN_DARKIMG, enabled=(not is_idle))
@@ -421,6 +446,10 @@ class UIController:
         mx, my = self._local_mouse()
         if not self._is_over_drawlist(mx, my):
             return
+        # mouse_down fires every frame while the button is held — once a drag is
+        # in progress, ignore the repeats or the box being dragged over would grab too
+        if any(roi.is_dragging() for roi in self._rois.values()):
+            return
         # give the click to the topmost (last-drawn) ROI that hits, so overlapping
         # boxes never drag together; the hit ROI becomes the selected one
         hit = None
@@ -442,6 +471,7 @@ class UIController:
     def _on_mouse_release(self, s, a) -> None:
         for roi in self._rois.values():
             roi.on_mouse_release()
+            roi.set_selected(False)  # selection only shows while the mouse is held
         self._save_rois_to_active()
 
     # display helpers

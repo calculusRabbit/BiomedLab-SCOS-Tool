@@ -39,6 +39,12 @@ class Pipeline:
         self._reset_requested: bool = False
         self._roi_pixels: tuple | None = None
         self._dark_image: np.ndarray | None = None  # pre-cropped to ROI, set via set_dark_image()
+        self._processing_enabled = False  # off until Preview is pressed; toggled via set_processing()
+
+        # most recent grabbed frame, updated by the grab thread on every grab
+        # (plain reference assignment, GIL-safe) — lets the UI show the live
+        # image even while SCOS processing is paused
+        self.latest_frame: np.ndarray | None = None
 
         self.writer = FrameWriter()
 
@@ -91,6 +97,11 @@ class Pipeline:
 
     def set_roi(self, roi_pixels: tuple | None) -> None:
         self._roi_pixels = roi_pixels
+
+    def set_processing(self, enabled: bool) -> None:
+        # turn SCOS processing on/off (Preview/Pause) — grabbing and recording
+        # are unaffected, the grab loop just stops feeding the process thread
+        self._processing_enabled = enabled
 
     def set_dark_image(self, img: np.ndarray | None) -> None:
         # cast to float64 here so the processor can subtract directly without converting each frame
@@ -152,6 +163,7 @@ class Pipeline:
                 frame, cam_ts, frame_counter, exp_end_ts = result
                 host_ts = time.time()
                 self._grabbed += 1
+                self.latest_frame = frame
 
                 # send to FrameWriter before processing so every frame is recorded,
                 # even if the process thread is backed up
@@ -166,12 +178,13 @@ class Pipeline:
 
                 # drop the previous frame if the process thread hasn't picked it up yet,
                 # so processing always works on the most recent frame
-                try:
-                    self._process_queue.get_nowait()
-                    self.drop_processed += 1
-                except queue.Empty:
-                    pass
-                self._process_queue.put_nowait((frame, host_ts))
+                if self._processing_enabled:
+                    try:
+                        self._process_queue.get_nowait()
+                        self.drop_processed += 1
+                    except queue.Empty:
+                        pass
+                    self._process_queue.put_nowait((frame, host_ts))
 
                 self._update_stats()
 

@@ -96,8 +96,8 @@ class SCOS_UI:
 
     _ROI_BUTTONS = [
         ("Preview", BTN_PREVIEW),
-        ("Start", BTN_START),
         ("Pause", BTN_PAUSE),
+        ("Start", BTN_START),
         ("Stop", BTN_STOP),
     ]
 
