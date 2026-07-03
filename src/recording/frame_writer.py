@@ -116,7 +116,9 @@ class FrameWriter:
         self.session_meta = session_meta
         self.camera_meta = camera_meta
 
-        self.output_folder = Path(session_meta.output_folder) / session_meta.study_name / session_meta.subject_id
+        # files land directly in the chosen folder; study/subject go in the
+        # filename (and file attrs), no automatic subfolders
+        self.output_folder = Path(session_meta.output_folder)
         self.output_folder.mkdir(parents=True, exist_ok=True)
 
         self.interval_ms = session_meta.interval_ms
@@ -326,7 +328,10 @@ class FrameWriter:
         }
 
     def recording_path(self):
+        s = self.session_meta
+        safe_study = safe_filename(s.study_name)
+        safe_subject = safe_filename(s.subject_id)
         safe_cam = safe_filename(self.camera_meta.camera_serial)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"run_{self.session_meta.run_number}_{safe_cam}_{timestamp}.h5"
+        filename = f"{safe_study}_{safe_subject}_run_{s.run_number}_{safe_cam}_{timestamp}.h5"
         return self.output_folder / filename

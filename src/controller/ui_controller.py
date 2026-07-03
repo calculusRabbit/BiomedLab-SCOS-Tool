@@ -161,6 +161,11 @@ class UIController:
             return
         # push the current ROI to the pipeline so it is ready before preview starts
         session.sync_pipeline_roi()
+        # connecting implies intent to use the camera — pre-check its recording
+        # checkbox (the user can still uncheck it)
+        if dpg.does_item_exist(self._rec_checkbox_tag(cam_id)):
+            dpg.set_value(self._rec_checkbox_tag(cam_id), True)
+        self._state.record_cam_ids.add(cam_id)
         # if preview is already running, the new camera joins it immediately
         if self._state.preview_on:
             session.reset(time.time())
@@ -209,7 +214,7 @@ class UIController:
         study_name = dpg.get_value(self._ui.INPUT_STUDY).strip()
         subject_id = dpg.get_value(self._ui.INPUT_SUBJECT).strip()
         if not study_name or not subject_id:
-            dpg.set_value(self._ui.REC_STATUS, "  Study Name and Subject ID required")
+            self._set_rec_status("  Study Name and Subject ID required", error=True)
             return
 
         folder = dpg.get_value(self._ui.INP_REC_FOLDER) or "./data"
@@ -232,7 +237,7 @@ class UIController:
         # run pre-flight checks before starting, block on errors, print warnings
         result = guard_check(self._manager, self._state, session_meta)
         if not result.ok:
-            dpg.set_value(self._ui.REC_STATUS, f"  {result.errors[0]}")
+            self._set_rec_status(f"  {result.errors[0]}", error=True)
             return
         for msg in result.info:
             print(f"[RecordingGuard] {msg}")
@@ -267,7 +272,7 @@ class UIController:
             session = self._manager.get_session(cam_id)
             session.pipeline.stop_recording()
         self._state.camera_state = CameraState.CONNECTED
-        dpg.set_value(self._ui.REC_STATUS, "")
+        self._set_rec_status("")
         self.sync_ui()
 
     def _on_autoscale(self) -> None:
@@ -296,7 +301,7 @@ class UIController:
                 s.pipeline.stop_recording()
         self._state.camera_state = CameraState.IDLE
         self._state.preview_on = False
-        dpg.set_value(self._ui.REC_STATUS, "  Camera error, please rescan")
+        self._set_rec_status("  Camera error, please rescan", error=True)
         self.sync_ui()
 
     # state machine
@@ -306,15 +311,15 @@ class UIController:
         # this is called after every state change so the UI always matches reality
         state = self._state.camera_state
         preview_on = self._state.preview_on
-        has_cameras = len(self._state.record_cam_ids) > 0
 
         is_idle = (state == CameraState.IDLE)
         is_connected = (state == CameraState.CONNECTED)
         is_recording = (state == CameraState.RECORDING)
 
-        # recording requires a connected camera and at least one checkbox checked;
-        # preview (SCOS processing) is optional and independent
-        can_record = (is_connected and has_cameras)
+        # recording only requires a connected camera — missing checkboxes or
+        # fields are reported by the guard when Start is clicked, so the user
+        # always gets feedback instead of a silently dead button
+        can_record = is_connected
 
         # connect button state depends on the currently selected camera in the dropdown
         active_session = self._manager.get_session(self._state.active_cam_id)
@@ -328,6 +333,11 @@ class UIController:
         dpg.configure_item(self._ui.BTN_STOP, enabled=is_recording)
         dpg.configure_item(self._ui.SLD_GAIN, enabled=not is_recording)
         dpg.configure_item(self._ui.SLD_EXPOSURE, enabled=not is_recording)
+
+    def _set_rec_status(self, text: str, error: bool = False) -> None:
+        # errors are shown in red so they cannot be missed
+        dpg.set_value(self._ui.REC_STATUS, text)
+        dpg.configure_item(self._ui.REC_STATUS, color=(255, 90, 90) if error else (255, 255, 255))
 
     # status update (called every frame while streaming)
 
@@ -353,15 +363,15 @@ class UIController:
             if not writer.is_saving():
                 self._on_rec_stop()
                 if writer.completed:
-                    dpg.set_value(self._ui.REC_STATUS, f"  Recording complete ({writer.accepted} frames)")
+                    self._set_rec_status(f"  Recording complete ({writer.accepted} frames)")
                 else:
-                    dpg.set_value(self._ui.REC_STATUS, "  Recording stopped unexpectedly, check files")
+                    self._set_rec_status("  Recording stopped unexpectedly, check files", error=True)
                 return
             elapsed = time.time() - self._state.record_start_time
             h = int(elapsed // 3600)
             m = int((elapsed % 3600) // 60)
             s = int(elapsed % 60)
-            dpg.set_value(self._ui.REC_STATUS, f"  Recording  {h:02d}:{m:02d}:{s:02d}")
+            self._set_rec_status(f"  Recording  {h:02d}:{m:02d}:{s:02d}")
 
     # hardware parameter callbacks
 
@@ -494,8 +504,13 @@ class UIController:
         for serial, display_name in cameras:
             dpg.add_checkbox(
                 label=display_name, default_value=False, parent=self._ui.REC_CAM_GROUP,
+                tag=self._rec_checkbox_tag(serial),
                 user_data=serial, callback=lambda s, a, u: self._on_rec_cam_toggle(u, a)
             )
+
+    @staticmethod
+    def _rec_checkbox_tag(serial: str) -> str:
+        return f"rec_cb_{serial}"
 
     def _selected_cam_id(self) -> str | None:
         # reverse-lookup the camera serial from the currently selected dropdown label
