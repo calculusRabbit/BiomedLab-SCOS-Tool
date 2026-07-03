@@ -51,6 +51,8 @@ class SCOS_UI:
     BTN_REC_BROWSE = "btn_rec_browse"
     INP_REC_BUFFER = "inp_rec_buffer"
     INP_REC_INTERVAL = "inp_rec_interval"
+    INP_REC_LIMIT_VALUE = "inp_rec_limit_value"
+    DD_REC_LIMIT_UNIT = "dd_rec_limit_unit"
     REC_CAM_GROUP = "rec_cam_group"
     REC_STATUS    = "rec_status"
 
@@ -75,13 +77,8 @@ class SCOS_UI:
 
     # trigger source
     TRIGGER_DROPDOWN = "dd_trigger"
+    BTN_TRIGGER_SCAN = "btn_trigger_scan"
     BTN_TRIGGER_CONNECT = "btn_trigger_connect"
-
-    # dark image
-    BTN_DARKIMG = "btn_darkImg"
-    BTN_DARKBROWSE = "btn_dark_Browse"
-    BTN_DARKCLEAR = "btn_dark_clear"
-    INP_DARKPATH = "dark_path"
 
     # K² spatial map panel
     K2_MAP_TAG = ["k2_raw", "k2_1", "k2_2", "k2_3", "k2_4", "k2_5"]
@@ -96,8 +93,8 @@ class SCOS_UI:
 
     _ROI_BUTTONS = [
         ("Preview", BTN_PREVIEW),
-        ("Start", BTN_START),
         ("Pause", BTN_PAUSE),
+        ("Start", BTN_START),
         ("Stop", BTN_STOP),
     ]
 
@@ -230,20 +227,6 @@ class SCOS_UI:
                                          default_value=20000.0, format="%.0f µs", width=-1)
 
             dpg.add_separator()
-            dpg.add_text("Dark Image")
-            dpg.add_button(label="Capture Dark Image", tag=self.BTN_DARKIMG, width=-1)
-            with dpg.table(header_row=False, policy=dpg.mvTable_SizingStretchProp, pad_outerX=True):
-                dpg.add_table_column(width_fixed=True, init_width_or_weight=90)
-                dpg.add_table_column(width_stretch=True)
-                dpg.add_table_column(width_fixed=True, init_width_or_weight=55)
-                dpg.add_table_column(width_fixed=True, init_width_or_weight=50)
-                with dpg.table_row():
-                    dpg.add_text("Load from file")
-                    dpg.add_input_text(default_value="", width=-1, tag=self.INP_DARKPATH)
-                    dpg.add_button(label="Browse", width=-1, tag=self.BTN_DARKBROWSE)
-                    dpg.add_button(label="Clear",  width=-1, tag=self.BTN_DARKCLEAR)
-
-            dpg.add_separator()
             self._recording_panel()
 
     def _recording_panel(self) -> None:
@@ -255,7 +238,7 @@ class SCOS_UI:
         with dpg.table(header_row=False, policy=dpg.mvTable_SizingStretchProp, pad_outerX=True):
             dpg.add_table_column(width_fixed=True, init_width_or_weight=150)
             dpg.add_table_column(width_stretch=True)
-            dpg.add_table_column(width_fixed=True, init_width_or_weight=55)
+            dpg.add_table_column(width_fixed=True, init_width_or_weight=85)
             with dpg.table_row():
                 dpg.add_text("Recording buffer size:")
                 dpg.add_input_int(tag=self.INP_REC_BUFFER, default_value=1000,
@@ -266,6 +249,12 @@ class SCOS_UI:
                 dpg.add_input_int(tag=self.INP_REC_INTERVAL, default_value=0,
                                   min_value=0, min_clamped=True, width=-1)
                 dpg.add_text("ms")
+            with dpg.table_row():
+                dpg.add_text("Stop after:")
+                dpg.add_input_int(tag=self.INP_REC_LIMIT_VALUE, default_value=500,
+                                  min_value=1, min_clamped=True, width=-1)
+                dpg.add_combo(["manual", "frames", "seconds", "minutes", "hours"],
+                              tag=self.DD_REC_LIMIT_UNIT, default_value="manual", width=-1)
 
         with dpg.table(header_row=False, policy=dpg.mvTable_SizingStretchProp, pad_outerX=True):
             dpg.add_table_column(width_fixed=True, init_width_or_weight=55)
@@ -336,6 +325,7 @@ class SCOS_UI:
             with dpg.group(horizontal=True):
                 dpg.add_text("Trigger source:")
                 dpg.add_combo([], tag=self.TRIGGER_DROPDOWN, width=100)
+                dpg.add_button(label="Scan", tag=self.BTN_TRIGGER_SCAN)
                 dpg.add_button(label="Connect", tag=self.BTN_TRIGGER_CONNECT)
                 dpg.add_text("Time scale:")
                 dpg.add_input_int(default_value=0, width=100)

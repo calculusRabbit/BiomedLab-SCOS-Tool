@@ -3,12 +3,12 @@
 # HDF5 layout per recording file:
 #   attrs:          study_name, subject_id, run_number, camera_id, gain_db,
 #                   exposure_us, pixel_format, tick_frequency_hz,
-#                   pc_start_time_unix, pc_end_time_unix, interval_ms
-#   frames          (N, H, W) uint8   ROI-cropped raw frames
+#                   pc_start_time_unix, pc_end_time_unix, interval_ms,
+#                   max_frames, max_seconds
+#   frames          (N, H, W) uint8   full-sensor raw frames
 #   pc_time         (N,)      float64 PC wall-clock time at grab (seconds)
 #   camera_time     (N,)      int64   hardware timestamp in ticks (-1 if unavailable)
 #   frame_counter   (N,)      int64   hardware frame ID (-1 if unavailable)
-#   dark_image      (H, W)    float32 dark image used during this recording (optional)
 #
 # Datasets are pre-allocated and resized down to the actual frame count on close.
 
@@ -50,6 +50,8 @@ class SessionMeta:
     output_folder: str
     interval_ms: float   # 0 = every frame
     buffer_size: int
+    max_frames: int = 0     # stop after this many frames (0 = no limit)
+    max_seconds: float = 0.0  # stop after this much wall time (0 = no limit)
 
 
 @dataclass
@@ -81,11 +83,12 @@ class FrameWriter:
         self.thread = None
         self.running = False
         self.dropped_frames = 0
+        self.accepted = 0        # frames accepted into the queue this recording
+        self.completed = False   # True only when a frame/duration limit was reached
 
         self.session_meta: SessionMeta | None = None
         self.camera_meta: CameraMeta | None = None
         self.output_folder: Path | None = None
-        self._dark_image: np.ndarray | None = None
         self.interval_ms = 0.0
         self.tick_freq_hz = None
         self.last_cam_ts = 0
@@ -106,16 +109,16 @@ class FrameWriter:
     def is_saving(self):
         return self.running
 
-    def start(self, session_meta: SessionMeta, camera_meta: CameraMeta,
-              dark_image: np.ndarray | None = None) -> None:
+    def start(self, session_meta: SessionMeta, camera_meta: CameraMeta) -> None:
         if self.running:
             return
 
         self.session_meta = session_meta
         self.camera_meta = camera_meta
-        self._dark_image = dark_image
 
-        self.output_folder = Path(session_meta.output_folder) / session_meta.study_name / session_meta.subject_id
+        # files land directly in the chosen folder; study/subject go in the
+        # filename (and file attrs), no automatic subfolders
+        self.output_folder = Path(session_meta.output_folder)
         self.output_folder.mkdir(parents=True, exist_ok=True)
 
         self.interval_ms = session_meta.interval_ms
@@ -123,6 +126,8 @@ class FrameWriter:
         self.last_cam_ts = 0
         self.last_pc_ts = 0.0
         self.dropped_frames = 0
+        self.accepted = 0
+        self.completed = False
 
         self.queue = queue.Queue(maxsize=session_meta.buffer_size)
         self.running = True
@@ -159,8 +164,24 @@ class FrameWriter:
 
         try:
             self.queue.put_nowait(record)
+            self.accepted += 1
         except queue.Full:
             self.dropped_frames += 1
+            return
+
+        # auto-stop when the frame or duration limit is reached
+        # runs on the grab thread, so no join here — just signal the write
+        # thread to flush and close, the UI notices via is_saving()/completed
+        s = self.session_meta
+        limit_hit = (
+            (s.max_frames > 0 and self.accepted >= s.max_frames) or
+            (s.max_seconds > 0 and record.pc_time - self.camera_meta.pc_start_time_unix >= s.max_seconds)
+        )
+        if limit_hit:
+            self.completed = True
+            self.running = False
+            self.queue.put(None)
+            print(f"[FrameWriter] limit reached ({self.accepted} frames), finishing")
 
     # write thread
 
@@ -233,8 +254,6 @@ class FrameWriter:
         path = self.recording_path()
         file = h5py.File(path, "w")
         self.write_attrs(file)
-        if self._dark_image is not None:
-            file.create_dataset("dark_image", data=self._dark_image.astype(np.float32))
         ds = self.create_datasets(file, frame_shape, frame_dtype)
 
         print(f"[FrameWriter] recording started: {path.name}")
@@ -286,6 +305,8 @@ class FrameWriter:
         file.attrs["subject_id"] = s.subject_id
         file.attrs["run_number"] = s.run_number
         file.attrs["interval_ms"] = s.interval_ms
+        file.attrs["max_frames"] = s.max_frames
+        file.attrs["max_seconds"] = s.max_seconds
         file.attrs["camera_id"] = f"{c.camera_model} | SN:{c.camera_serial}"
         file.attrs["gain_db"] = c.gain_db
         file.attrs["exposure_us"] = c.exposure_us
@@ -307,7 +328,10 @@ class FrameWriter:
         }
 
     def recording_path(self):
+        s = self.session_meta
+        safe_study = safe_filename(s.study_name)
+        safe_subject = safe_filename(s.subject_id)
         safe_cam = safe_filename(self.camera_meta.camera_serial)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"run_{self.session_meta.run_number}_{safe_cam}_{timestamp}.h5"
+        filename = f"{safe_study}_{safe_subject}_run_{s.run_number}_{safe_cam}_{timestamp}.h5"
         return self.output_folder / filename

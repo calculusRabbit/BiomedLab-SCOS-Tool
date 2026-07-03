@@ -47,6 +47,7 @@ class ROISelector:
         self._mode = None   # None | "moving" | "resizing"
         self._drag_handle = None
         self._drag_offset = (0.0, 0.0)
+        self._selected = False
 
         self._draw()
 
@@ -68,6 +69,20 @@ class ROISelector:
 
     def is_visible(self) -> bool:
         return self._visible
+
+    ## selection ##
+
+    def set_selected(self, selected: bool) -> None:
+        if selected == self._selected:
+            return
+        self._selected = selected
+        dpg.configure_item(self._tag_label, text=self._label_text())
+
+    def is_selected(self) -> bool:
+        return self._selected
+
+    def _label_text(self) -> str:
+        return f"{self._name} (selected)" if self._selected else self._name
 
     ## coordinates ##
 
@@ -137,7 +152,7 @@ class ROISelector:
             color=self._color, tag=self._tag_rect, parent=self._drawlist,
         )
         dpg.draw_text(
-            pos=(x1 + 4, y1 - 18), text=self._name,
+            pos=(x1 + 4, y1 - 18), text=self._label_text(),
             color=self._color, size=16,
             tag=self._tag_label, parent=self._drawlist,
         )

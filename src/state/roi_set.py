@@ -9,9 +9,10 @@ class ROISet:
     # pixel coordinates when needed for cropping or processing.
 
     # default normalized (x1, y1, x2, y2) positions for each ROI at startup
+    # this is the single place to change where the boxes appear on launch
     _DEFAULTS = {
-        "source": (0.25, 0.25, 0.75, 0.75),
-        "detector": (0.10, 0.10, 0.40, 0.40),
+        "1": (0.05, 0.30, 0.45, 0.70),  # left half
+        "2": (0.55, 0.30, 0.95, 0.70),  # right half
     }
 
     def __init__(self):

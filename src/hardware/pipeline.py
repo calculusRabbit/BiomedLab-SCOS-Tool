@@ -38,7 +38,12 @@ class Pipeline:
         self._processor = Processor()
         self._reset_requested: bool = False
         self._roi_pixels: tuple | None = None
-        self._dark_image: np.ndarray | None = None  # pre-cropped to ROI, set via set_dark_image()
+        self._processing_enabled = False  # off until Preview is pressed; toggled via set_processing()
+
+        # most recent grabbed frame, updated by the grab thread on every grab
+        # (plain reference assignment, GIL-safe) — lets the UI show the live
+        # image even while SCOS processing is paused
+        self.latest_frame: np.ndarray | None = None
 
         self.writer = FrameWriter()
 
@@ -92,9 +97,10 @@ class Pipeline:
     def set_roi(self, roi_pixels: tuple | None) -> None:
         self._roi_pixels = roi_pixels
 
-    def set_dark_image(self, img: np.ndarray | None) -> None:
-        # cast to float64 here so the processor can subtract directly without converting each frame
-        self._dark_image = img.astype(np.float64) if img is not None else None
+    def set_processing(self, enabled: bool) -> None:
+        # turn SCOS processing on/off (Preview/Pause) — grabbing and recording
+        # are unaffected, the grab loop just stops feeding the process thread
+        self._processing_enabled = enabled
 
     def reset_processor(self) -> None:
         # sets a flag that the process thread checks at the start of its next iteration
@@ -129,7 +135,7 @@ class Pipeline:
             tick_frequency_hz=self._camera.get_tick_frequency_hz(),
             pc_start_time_unix=time.time(),
         )
-        self.writer.start(session_meta, camera_meta, dark_image=self._dark_image)
+        self.writer.start(session_meta, camera_meta)
 
     def stop_recording(self) -> None:
         self.writer.stop()
@@ -152,13 +158,13 @@ class Pipeline:
                 frame, cam_ts, frame_counter, exp_end_ts = result
                 host_ts = time.time()
                 self._grabbed += 1
+                self.latest_frame = frame
 
-                # send to FrameWriter before processing so every frame is recorded,
-                # even if the process thread is backed up
-                roi = self._roi_pixels
-                record_frame = crop_frame(frame, roi) if roi else frame
+                # send the FULL frame to FrameWriter before processing so every frame
+                # is recorded, even if the process thread is backed up
+                # (recordings are always full sensor size, ROI only affects SCOS math)
                 self.writer.push_frame(FrameRecord(
-                    frame=record_frame,
+                    frame=frame,
                     pc_time=host_ts,
                     camera_time=cam_ts,
                     frame_counter=frame_counter,
@@ -166,12 +172,13 @@ class Pipeline:
 
                 # drop the previous frame if the process thread hasn't picked it up yet,
                 # so processing always works on the most recent frame
-                try:
-                    self._process_queue.get_nowait()
-                    self.drop_processed += 1
-                except queue.Empty:
-                    pass
-                self._process_queue.put_nowait((frame, host_ts))
+                if self._processing_enabled:
+                    try:
+                        self._process_queue.get_nowait()
+                        self.drop_processed += 1
+                    except queue.Empty:
+                        pass
+                    self._process_queue.put_nowait((frame, host_ts))
 
                 self._update_stats()
 
@@ -198,13 +205,12 @@ class Pipeline:
             try:
                 frame, _ts = item
 
-                # snapshot roi and dark_image into local vars to avoid a race condition
-                # with the UI thread calling set_roi() or set_dark_image() mid-frame
-                roi  = self._roi_pixels
-                dark = self._dark_image  # already cropped to ROI size via set_dark_image()
+                # snapshot roi into a local var to avoid a race condition
+                # with the UI thread calling set_roi() mid-frame
+                roi = self._roi_pixels
 
                 cropped = crop_frame(frame, roi) if roi else frame
-                output = self._processor.process(cropped, dark)
+                output = self._processor.process(cropped)
                 self._processed += 1
                 self.total_processed += 1
 

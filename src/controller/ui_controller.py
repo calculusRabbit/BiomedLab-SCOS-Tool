@@ -3,7 +3,8 @@
 # Responsibilities:
 #   - Register all button/slider/mouse callbacks at startup
 #   - Drive the render loop (update() is called every frame from main.py)
-#   - Manage the camera state machine (IDLE -> CONNECTED -> PREVIEWING -> RECORDING)
+#   - Manage the camera state machine (IDLE -> CONNECTED <-> RECORDING)
+#     plus the independent preview_on flag (SCOS processing/visualization)
 #   - Push new frames, plots, and K2 maps to the UI
 #
 # Threading note: all methods here run on the main (UI) thread.
@@ -12,7 +13,6 @@
 
 import time
 
-import cv2
 import dearpygui.dearpygui as dpg
 import numpy as np
 from tkinter import filedialog
@@ -25,12 +25,13 @@ from config import (
     ROI_CONFIGS,
 )
 from controller.camera_manager import CameraManager
-from controller.dark_capture_controller import DarkCaptureController
 from controller.recording_guard import check as guard_check
+from controller.trigger_manager import TriggerManager
 from recording.frame_writer import SessionMeta
+from recording.trigger_writer import TriggerWriter
 from controller.roi_selector import ROISelector
 from processing.scos_result import SCOSResult
-from processing.utils import crop_frame, to_display_texture
+from processing.utils import to_display_texture
 from state.app_state import AppState, CameraState
 from state.roi_set import ROISet
 from state.scos_timeseries import SCOSTimeSeries
@@ -44,13 +45,9 @@ class UIController:
         self._manager = manager
         self._state = app_state
         self._last_size = (0, 0)
-        self._rois: dict[str, ROISelector] = {}  # one ROISelector per ROI name (source, detector)
-
-        # callback so dark controller can update the path field in the main UI after saving
-        self._dark_ctrl = DarkCaptureController(
-            manager, app_state,
-            lambda p: dpg.set_value(self._ui.INP_DARKPATH, p),
-        )
+        self._rois: dict[str, ROISelector] = {}  # one ROISelector per ROI name ("1", "2")
+        self._trigger = TriggerManager()
+        self._trigger_writer = TriggerWriter()
 
     # setup
 
@@ -75,6 +72,7 @@ class UIController:
         dpg.set_item_callback(self._ui.BTN_SCAN, self._on_scan)
         dpg.set_item_callback(self._ui.BTN_CONNECT, self._on_connect)
         dpg.set_item_callback(self._ui.BTN_PREVIEW, self._on_preview)
+        dpg.set_item_callback(self._ui.BTN_PAUSE, self._on_pause)
         dpg.set_item_callback(self._ui.BTN_START, self._on_rec_start)
         dpg.set_item_callback(self._ui.BTN_STOP, self._on_rec_stop)
         dpg.set_item_callback(self._ui.BTN_AUTOSCALE, self._on_autoscale)
@@ -82,12 +80,9 @@ class UIController:
         dpg.set_item_callback(self._ui.SLD_GAIN, self._on_gain_change)
         dpg.set_item_callback(self._ui.SLD_EXPOSURE, self._on_exposure_change)
         dpg.set_item_callback(self._ui.BTN_REC_BROWSE, self._on_rec_browse)
-        dpg.set_item_callback(self._ui.BTN_DARKIMG, self._on_dark_open)
-        dpg.set_item_callback(self._ui.BTN_DARKBROWSE, self._on_dark_browse)
-        dpg.set_item_callback(self._ui.BTN_DARKCLEAR, self._on_dark_clear)
+        dpg.set_item_callback(self._ui.BTN_TRIGGER_SCAN, self._on_trigger_scan)
         dpg.set_item_callback(self._ui.BTN_TRIGGER_CONNECT, self._on_trigger_connect)
 
-        self._dark_ctrl.setup()
         self.sync_ui()
 
     def shutdown(self) -> None:
@@ -104,23 +99,27 @@ class UIController:
                 self._on_pipeline_crash(cam_id)
                 continue
 
+            # live image comes straight from the grab thread so it keeps
+            # updating even while SCOS processing is paused
+            session.last_frame = session.pipeline.latest_frame
+
             result = session.pipeline.get_latest()
             if result is None:
                 continue
 
-            full_frame, output = result
-            session.last_frame = full_frame  # store for dark capture preview
+            _, output = result
 
             # t is time since preview/recording started, used as the x-axis in plots
             t = time.time() - session.data.start_time
             session.data.push(t, output)
 
-            # feed frames to dark capture controller if a capture is in progress
-            if self._dark_ctrl.is_capturing_for(cam_id):
-                self._dark_ctrl.feed_frame(cam_id, full_frame)
-
-        # update dark capture window thumbnails if it is open
-        self._dark_ctrl.update_ui()
+        # drain trigger markers (non-blocking) — log to file while recording,
+        # otherwise just print so the connection can be verified
+        for marker, pc_time in self._trigger.poll():
+            if self._state.camera_state == CameraState.RECORDING:
+                self._trigger_writer.push(pc_time, marker)
+            else:
+                print(f"[Trigger] {marker}")
 
         # only push display data for the camera currently selected in the dropdown
         active = self._manager.get_session(self._state.active_cam_id)
@@ -130,11 +129,13 @@ class UIController:
         if active.last_frame is not None:
             self._push_frame(active.last_frame)
 
-        if self._state.camera_state in (CameraState.PREVIEWING, CameraState.RECORDING):
+        if self._state.preview_on:
             self._push_plots(active.data)
             latest = active.data.latest()
             if latest is not None:
                 self._push_k2_maps(latest)
+        # status panel must keep updating while recording even if preview is paused
+        if self._state.preview_on or self._state.camera_state == CameraState.RECORDING:
             self._update_rec_status()
 
     # button callbacks
@@ -147,22 +148,29 @@ class UIController:
         self._rebuild_rec_checkboxes(cameras)
         self._switch_to(cameras[0][0])  # default to first camera found
         self._state.camera_state = CameraState.IDLE
-        self._on_trigger_scan()
         self.sync_ui()
 
     def _on_trigger_scan(self) -> None:
-        # placeholder: scan for available trigger sources and populate the trigger dropdown
-        pass
+        # scan for available LSL marker streams and populate the trigger dropdown
+        # (the resolver warms up in the background — a scan right after launch may
+        # come back empty, clicking Scan again a second later finds the streams)
+        names = self._trigger.scan()
+        dpg.configure_item(self._ui.TRIGGER_DROPDOWN, items=names)
+        if names:
+            dpg.set_value(self._ui.TRIGGER_DROPDOWN, names[0])
+        print(f"[Trigger] scan found {len(names)} stream(s): {names}")
 
     def _on_trigger_connect(self) -> None:
-        # placeholder: connect to the selected trigger source and listen for signals
-        print("called from _on_trigger_connect()")
-        pass
-
-    def _on_trigger_received(self) -> None:
-        # placeholder: called when a trigger signal arrives to start recording automatically
-        # self._on_rec_start()
-        pass
+        # connect to the marker stream selected in the dropdown; markers are then
+        # drained every frame in update()
+        name = dpg.get_value(self._ui.TRIGGER_DROPDOWN)
+        if not name:
+            print("[Trigger] no stream selected — click Scan first")
+            return
+        if self._trigger.connect(name):
+            print(f"[Trigger] connected to '{name}'")
+        else:
+            print(f"[Trigger] stream '{name}' not found — rescan and try again")
 
     def _on_connect(self) -> None:
         cam_id = self._selected_cam_id()
@@ -173,8 +181,17 @@ class UIController:
             return
         # push the current ROI to the pipeline so it is ready before preview starts
         session.sync_pipeline_roi()
+        # connecting implies intent to use the camera — pre-check its recording
+        # checkbox (the user can still uncheck it)
+        if dpg.does_item_exist(self._rec_checkbox_tag(cam_id)):
+            dpg.set_value(self._rec_checkbox_tag(cam_id), True)
+        self._state.record_cam_ids.add(cam_id)
+        # if preview is already running, the new camera joins it immediately
+        if self._state.preview_on:
+            session.reset(time.time())
+            session.pipeline.set_processing(True)
         self._sync_dropdown(cam_id)
-        # only advance to CONNECTED if we are still in IDLE, do not override PREVIEWING or RECORDING
+        # only advance to CONNECTED if we are still in IDLE, do not override RECORDING
         if self._state.camera_state == CameraState.IDLE:
             self._state.camera_state = CameraState.CONNECTED
         self.sync_ui()
@@ -187,14 +204,25 @@ class UIController:
             self.sync_ui()
 
     def _on_preview(self) -> None:
-        # start live feed for all connected cameras and reset their data buffers
+        # turn on SCOS processing + visualization for all connected cameras
+        # does not touch camera_state — preview can be resumed mid-recording
         connected = self._manager.connected_ids()
         if not connected:
             return
         now = time.time()
         for cam_id in connected:
-            self._manager.get_session(cam_id).reset(now)
-        self._state.camera_state = CameraState.PREVIEWING
+            session = self._manager.get_session(cam_id)
+            session.reset(now)
+            session.pipeline.set_processing(True)
+        self._state.preview_on = True
+        self.sync_ui()
+
+    def _on_pause(self) -> None:
+        # turn off SCOS processing + visualization to free CPU
+        # recording (fed by the grab thread) continues untouched
+        for cam_id in self._manager.connected_ids():
+            self._manager.get_session(cam_id).pipeline.set_processing(False)
+        self._state.preview_on = False
         self.sync_ui()
 
     def _on_rec_browse(self) -> None:
@@ -202,50 +230,18 @@ class UIController:
         if folder:
             dpg.set_value(self._ui.INP_REC_FOLDER, folder)
 
-    def _on_dark_open(self) -> None:
-        # open the dark capture window for all currently connected cameras
-        connected = self._manager.connected_ids()
-        if not connected:
-            return
-        self._dark_ctrl.open(connected)
-
-    def _on_dark_browse(self) -> None:
-        # load a previously saved dark image from disk and apply it to the active camera
-        # the file must be full sensor resolution (CAMERA_W x CAMERA_H) so it can be
-        # cropped to the current ROI here
-        path = filedialog.askopenfilename(
-            title="Load dark image",
-            filetypes=[("PNG image", "*.png"), ("All files", "*.*")],
-        )
-        if not path:
-            return
-        img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
-        if img is None:
-            return
-        session = self._manager.get_session(self._state.active_cam_id)
-        if session is None:
-            return
-        roi = session.roi_set.to_pixels("source")
-        roi_h, roi_w = roi[3] - roi[1], roi[2] - roi[0]
-        cropped = crop_frame(img, roi)
-        if cropped.shape != (roi_h, roi_w):
-            # image is not full resolution or ROI is out of bounds, skip silently
-            print(f"[DarkBrowse] bad image size {img.shape[1]}x{img.shape[0]}, skipping")
-            return
-        dpg.set_value(self._ui.INP_DARKPATH, path)
-        session.dark_image = cropped.astype(np.float32)
-
     def _on_rec_start(self) -> None:
         study_name = dpg.get_value(self._ui.INPUT_STUDY).strip()
         subject_id = dpg.get_value(self._ui.INPUT_SUBJECT).strip()
         if not study_name or not subject_id:
-            dpg.set_value(self._ui.REC_STATUS, "  Study Name and Subject ID required")
+            self._set_rec_status("  Study Name and Subject ID required", error=True)
             return
 
         folder = dpg.get_value(self._ui.INP_REC_FOLDER) or "./data"
         interval_ms = float(dpg.get_value(self._ui.INP_REC_INTERVAL))
         buffer_size = int(dpg.get_value(self._ui.INP_REC_BUFFER))
         run_number = dpg.get_value(self._ui.INPUT_RUN)
+        max_frames, max_seconds = self._read_rec_limit()
 
         session_meta = SessionMeta(
             study_name=study_name,
@@ -254,12 +250,14 @@ class UIController:
             output_folder=folder,
             interval_ms=interval_ms,
             buffer_size=buffer_size,
+            max_frames=max_frames,
+            max_seconds=max_seconds,
         )
 
         # run pre-flight checks before starting, block on errors, print warnings
         result = guard_check(self._manager, self._state, session_meta)
         if not result.ok:
-            dpg.set_value(self._ui.REC_STATUS, f"  {result.errors[0]}")
+            self._set_rec_status(f"  {result.errors[0]}", error=True)
             return
         for msg in result.info:
             print(f"[RecordingGuard] {msg}")
@@ -273,16 +271,32 @@ class UIController:
                 session.sync_pipeline_roi()
                 session.pipeline.start_recording(session_meta)
 
+        # marker log opens/closes with the recording session
+        self._trigger_writer.start(session_meta)
+
         self._state.camera_state = CameraState.RECORDING
         self._state.record_start_time = time.time()
         self.sync_ui()
+
+    def _read_rec_limit(self) -> tuple[int, float]:
+        # convert the "Stop after" value + unit into (max_frames, max_seconds)
+        # 0 means no limit — recording runs until Stop is pressed
+        value = int(dpg.get_value(self._ui.INP_REC_LIMIT_VALUE))
+        unit = dpg.get_value(self._ui.DD_REC_LIMIT_UNIT)
+        if unit == "frames":
+            return value, 0.0
+        if unit in ("seconds", "minutes", "hours"):
+            factor = {"seconds": 1.0, "minutes": 60.0, "hours": 3600.0}[unit]
+            return 0, value * factor
+        return 0, 0.0  # manual
 
     def _on_rec_stop(self) -> None:
         for cam_id in self._manager.connected_ids():
             session = self._manager.get_session(cam_id)
             session.pipeline.stop_recording()
-        self._state.camera_state = CameraState.PREVIEWING
-        dpg.set_value(self._ui.REC_STATUS, "")
+        self._trigger_writer.stop()
+        self._state.camera_state = CameraState.CONNECTED
+        self._set_rec_status("")
         self.sync_ui()
 
     def _on_autoscale(self) -> None:
@@ -309,8 +323,10 @@ class UIController:
             s = self._manager.get_session(cid)
             if s:
                 s.pipeline.stop_recording()
+        self._trigger_writer.stop()
         self._state.camera_state = CameraState.IDLE
-        dpg.set_value(self._ui.REC_STATUS, "  Camera error, please rescan")
+        self._state.preview_on = False
+        self._set_rec_status("  Camera error, please rescan", error=True)
         self.sync_ui()
 
     # state machine
@@ -319,15 +335,16 @@ class UIController:
         # enable or disable buttons based on the current camera state
         # this is called after every state change so the UI always matches reality
         state = self._state.camera_state
-        has_cameras = len(self._state.record_cam_ids) > 0
+        preview_on = self._state.preview_on
 
         is_idle = (state == CameraState.IDLE)
         is_connected = (state == CameraState.CONNECTED)
-        is_previewing = (state == CameraState.PREVIEWING)
         is_recording = (state == CameraState.RECORDING)
 
-        # recording requires at least one camera checkbox checked and live preview running
-        can_record = (is_previewing and has_cameras)
+        # recording only requires a connected camera — missing checkboxes or
+        # fields are reported by the guard when Start is clicked, so the user
+        # always gets feedback instead of a silently dead button
+        can_record = is_connected
 
         # connect button state depends on the currently selected camera in the dropdown
         active_session = self._manager.get_session(self._state.active_cam_id)
@@ -335,14 +352,18 @@ class UIController:
 
         dpg.configure_item(self._ui.BTN_SCAN, enabled=(not is_recording))
         dpg.configure_item(self._ui.BTN_CONNECT, enabled=(not active_connected and not is_recording))
-        dpg.configure_item(self._ui.BTN_PREVIEW, enabled=is_connected)
+        dpg.configure_item(self._ui.BTN_PREVIEW, enabled=(not is_idle and not preview_on))
+        dpg.configure_item(self._ui.BTN_PAUSE, enabled=preview_on)
         dpg.configure_item(self._ui.BTN_START, enabled=can_record)
         dpg.configure_item(self._ui.BTN_STOP, enabled=is_recording)
-        dpg.configure_item(self._ui.BTN_DARKIMG, enabled=(not is_idle))
-        dpg.configure_item(self._ui.BTN_DARKBROWSE, enabled=not is_recording)
-        dpg.configure_item(self._ui.BTN_DARKCLEAR, enabled=not is_recording)
         dpg.configure_item(self._ui.SLD_GAIN, enabled=not is_recording)
         dpg.configure_item(self._ui.SLD_EXPOSURE, enabled=not is_recording)
+
+    def _set_rec_status(self, text: str, error: bool = False) -> None:
+        # errors are shown in red so they cannot be missed
+        # (-255, 0, 0, 255) is DearPyGui's sentinel for "use the theme's default color"
+        dpg.set_value(self._ui.REC_STATUS, text)
+        dpg.configure_item(self._ui.REC_STATUS, color=(255, 90, 90) if error else (-255, 0, 0, 255))
 
     # status update (called every frame while streaming)
 
@@ -362,16 +383,21 @@ class UIController:
         dpg.set_value(self._ui.DROPPED_FRAMEs_SAVING, str(p.recording.dropped))
 
         if self._state.camera_state == CameraState.RECORDING:
-            # if the writer stopped on its own (e.g. disk full), auto-stop and warn
-            if not session.pipeline.writer.is_saving():
+            # the writer stops on its own when the frame/duration limit is reached
+            # (completed) or on an error like disk full (not completed)
+            writer = session.pipeline.writer
+            if not writer.is_saving():
                 self._on_rec_stop()
-                dpg.set_value(self._ui.REC_STATUS, "  Recording stopped unexpectedly, check files")
+                if writer.completed:
+                    self._set_rec_status(f"  Recording complete ({writer.accepted} frames)")
+                else:
+                    self._set_rec_status("  Recording stopped unexpectedly, check files", error=True)
                 return
             elapsed = time.time() - self._state.record_start_time
             h = int(elapsed // 3600)
             m = int((elapsed % 3600) // 60)
             s = int(elapsed % 60)
-            dpg.set_value(self._ui.REC_STATUS, f"  Recording  {h:02d}:{m:02d}:{s:02d}")
+            self._set_rec_status(f"  Recording  {h:02d}:{m:02d}:{s:02d}")
 
     # hardware parameter callbacks
 
@@ -405,23 +431,26 @@ class UIController:
 
     # mouse events
 
-    def _on_dark_clear(self) -> None:
-        session = self._manager.get_session(self._state.active_cam_id)
-        if session is None:
-            return
-        session.dark_image = None
-        dpg.set_value(self._ui.INP_DARKPATH, "")
-
     def _on_mouse_down(self, s, a) -> None:
         if self._state.camera_state == CameraState.RECORDING:
             return
-        session = self._manager.get_session(self._state.active_cam_id)
-        if session and session.dark_image is not None:
-            return  # ROI is locked while a dark image is applied to prevent shape mismatch
         mx, my = self._local_mouse()
-        if self._is_over_drawlist(mx, my):
-            for roi in self._rois.values():
-                roi.on_mouse_down(mx, my)
+        if not self._is_over_drawlist(mx, my):
+            return
+        # mouse_down fires every frame while the button is held — once a drag is
+        # in progress, ignore the repeats or the box being dragged over would grab too
+        if any(roi.is_dragging() for roi in self._rois.values()):
+            return
+        # give the click to the topmost (last-drawn) ROI that hits, so overlapping
+        # boxes never drag together; the hit ROI becomes the selected one
+        hit = None
+        for roi in reversed(list(self._rois.values())):
+            roi.on_mouse_down(mx, my)
+            if roi.is_dragging():
+                hit = roi
+                break
+        for roi in self._rois.values():
+            roi.set_selected(roi is hit)  # click on empty area deselects all
 
     def _on_mouse_move(self, s, a) -> None:
         mx, my = self._local_mouse()
@@ -433,6 +462,7 @@ class UIController:
     def _on_mouse_release(self, s, a) -> None:
         for roi in self._rois.values():
             roi.on_mouse_release()
+            roi.set_selected(False)  # selection only shows while the mouse is held
         self._save_rois_to_active()
 
     # display helpers
@@ -500,8 +530,13 @@ class UIController:
         for serial, display_name in cameras:
             dpg.add_checkbox(
                 label=display_name, default_value=False, parent=self._ui.REC_CAM_GROUP,
+                tag=self._rec_checkbox_tag(serial),
                 user_data=serial, callback=lambda s, a, u: self._on_rec_cam_toggle(u, a)
             )
+
+    @staticmethod
+    def _rec_checkbox_tag(serial: str) -> str:
+        return f"rec_cb_{serial}"
 
     def _selected_cam_id(self) -> str | None:
         # reverse-lookup the camera serial from the currently selected dropdown label
