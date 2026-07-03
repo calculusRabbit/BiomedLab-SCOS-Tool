@@ -47,10 +47,6 @@ CAMERA_DEFAULT_EXPOSURE = 20000.0
 # Recording
 RECORD_QUEUE_SIZE = 500  # max frames held in RAM (~440 MB at 1920×1200 Mono8)
 
-# Dark image capture — per-camera preview size inside the capture window
-DARK_THUMB_W = 330
-DARK_THUMB_H = 380
-
 # Add a new ROI by adding one entry here — name: RGBA color tuple.
 # The displayed label is "roi_<name>". ROI "1" is the one used for
 # processing/recording. The default position for each ROI lives in

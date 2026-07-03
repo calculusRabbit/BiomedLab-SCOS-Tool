@@ -13,7 +13,6 @@
 
 import time
 
-import cv2
 import dearpygui.dearpygui as dpg
 import numpy as np
 from tkinter import filedialog
@@ -26,12 +25,11 @@ from config import (
     ROI_CONFIGS,
 )
 from controller.camera_manager import CameraManager
-from controller.dark_capture_controller import DarkCaptureController
 from controller.recording_guard import check as guard_check
 from recording.frame_writer import SessionMeta
 from controller.roi_selector import ROISelector
 from processing.scos_result import SCOSResult
-from processing.utils import crop_frame, to_display_texture
+from processing.utils import to_display_texture
 from state.app_state import AppState, CameraState
 from state.roi_set import ROISet
 from state.scos_timeseries import SCOSTimeSeries
@@ -46,12 +44,6 @@ class UIController:
         self._state = app_state
         self._last_size = (0, 0)
         self._rois: dict[str, ROISelector] = {}  # one ROISelector per ROI name ("1", "2")
-
-        # callback so dark controller can update the path field in the main UI after saving
-        self._dark_ctrl = DarkCaptureController(
-            manager, app_state,
-            lambda p: dpg.set_value(self._ui.INP_DARKPATH, p),
-        )
 
     # setup
 
@@ -84,12 +76,8 @@ class UIController:
         dpg.set_item_callback(self._ui.SLD_GAIN, self._on_gain_change)
         dpg.set_item_callback(self._ui.SLD_EXPOSURE, self._on_exposure_change)
         dpg.set_item_callback(self._ui.BTN_REC_BROWSE, self._on_rec_browse)
-        dpg.set_item_callback(self._ui.BTN_DARKIMG, self._on_dark_open)
-        dpg.set_item_callback(self._ui.BTN_DARKBROWSE, self._on_dark_browse)
-        dpg.set_item_callback(self._ui.BTN_DARKCLEAR, self._on_dark_clear)
         dpg.set_item_callback(self._ui.BTN_TRIGGER_CONNECT, self._on_trigger_connect)
 
-        self._dark_ctrl.setup()
         self.sync_ui()
 
     def shutdown(self) -> None:
@@ -114,18 +102,11 @@ class UIController:
             if result is None:
                 continue
 
-            full_frame, output = result
+            _, output = result
 
             # t is time since preview/recording started, used as the x-axis in plots
             t = time.time() - session.data.start_time
             session.data.push(t, output)
-
-            # feed frames to dark capture controller if a capture is in progress
-            if self._dark_ctrl.is_capturing_for(cam_id):
-                self._dark_ctrl.feed_frame(cam_id, full_frame)
-
-        # update dark capture window thumbnails if it is open
-        self._dark_ctrl.update_ui()
 
         # only push display data for the camera currently selected in the dropdown
         active = self._manager.get_session(self._state.active_cam_id)
@@ -224,39 +205,6 @@ class UIController:
         if folder:
             dpg.set_value(self._ui.INP_REC_FOLDER, folder)
 
-    def _on_dark_open(self) -> None:
-        # open the dark capture window for all currently connected cameras
-        connected = self._manager.connected_ids()
-        if not connected:
-            return
-        self._dark_ctrl.open(connected)
-
-    def _on_dark_browse(self) -> None:
-        # load a previously saved dark image from disk and apply it to the active camera
-        # the file must be full sensor resolution (CAMERA_W x CAMERA_H) so it can be
-        # cropped to the current ROI here
-        path = filedialog.askopenfilename(
-            title="Load dark image",
-            filetypes=[("PNG image", "*.png"), ("All files", "*.*")],
-        )
-        if not path:
-            return
-        img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
-        if img is None:
-            return
-        session = self._manager.get_session(self._state.active_cam_id)
-        if session is None:
-            return
-        roi = session.roi_set.to_pixels("1")
-        roi_h, roi_w = roi[3] - roi[1], roi[2] - roi[0]
-        cropped = crop_frame(img, roi)
-        if cropped.shape != (roi_h, roi_w):
-            # image is not full resolution or ROI is out of bounds, skip silently
-            print(f"[DarkBrowse] bad image size {img.shape[1]}x{img.shape[0]}, skipping")
-            return
-        dpg.set_value(self._ui.INP_DARKPATH, path)
-        session.dark_image = cropped.astype(np.float32)
-
     def _on_rec_start(self) -> None:
         study_name = dpg.get_value(self._ui.INPUT_STUDY).strip()
         subject_id = dpg.get_value(self._ui.INPUT_SUBJECT).strip()
@@ -268,6 +216,7 @@ class UIController:
         interval_ms = float(dpg.get_value(self._ui.INP_REC_INTERVAL))
         buffer_size = int(dpg.get_value(self._ui.INP_REC_BUFFER))
         run_number = dpg.get_value(self._ui.INPUT_RUN)
+        max_frames, max_seconds = self._read_rec_limit()
 
         session_meta = SessionMeta(
             study_name=study_name,
@@ -276,6 +225,8 @@ class UIController:
             output_folder=folder,
             interval_ms=interval_ms,
             buffer_size=buffer_size,
+            max_frames=max_frames,
+            max_seconds=max_seconds,
         )
 
         # run pre-flight checks before starting, block on errors, print warnings
@@ -298,6 +249,18 @@ class UIController:
         self._state.camera_state = CameraState.RECORDING
         self._state.record_start_time = time.time()
         self.sync_ui()
+
+    def _read_rec_limit(self) -> tuple[int, float]:
+        # convert the "Stop after" value + unit into (max_frames, max_seconds)
+        # 0 means no limit — recording runs until Stop is pressed
+        value = int(dpg.get_value(self._ui.INP_REC_LIMIT_VALUE))
+        unit = dpg.get_value(self._ui.DD_REC_LIMIT_UNIT)
+        if unit == "frames":
+            return value, 0.0
+        if unit in ("seconds", "minutes", "hours"):
+            factor = {"seconds": 1.0, "minutes": 60.0, "hours": 3600.0}[unit]
+            return 0, value * factor
+        return 0, 0.0  # manual
 
     def _on_rec_stop(self) -> None:
         for cam_id in self._manager.connected_ids():
@@ -363,9 +326,6 @@ class UIController:
         dpg.configure_item(self._ui.BTN_PAUSE, enabled=preview_on)
         dpg.configure_item(self._ui.BTN_START, enabled=can_record)
         dpg.configure_item(self._ui.BTN_STOP, enabled=is_recording)
-        dpg.configure_item(self._ui.BTN_DARKIMG, enabled=(not is_idle))
-        dpg.configure_item(self._ui.BTN_DARKBROWSE, enabled=not is_recording)
-        dpg.configure_item(self._ui.BTN_DARKCLEAR, enabled=not is_recording)
         dpg.configure_item(self._ui.SLD_GAIN, enabled=not is_recording)
         dpg.configure_item(self._ui.SLD_EXPOSURE, enabled=not is_recording)
 
@@ -387,10 +347,15 @@ class UIController:
         dpg.set_value(self._ui.DROPPED_FRAMEs_SAVING, str(p.recording.dropped))
 
         if self._state.camera_state == CameraState.RECORDING:
-            # if the writer stopped on its own (e.g. disk full), auto-stop and warn
-            if not session.pipeline.writer.is_saving():
+            # the writer stops on its own when the frame/duration limit is reached
+            # (completed) or on an error like disk full (not completed)
+            writer = session.pipeline.writer
+            if not writer.is_saving():
                 self._on_rec_stop()
-                dpg.set_value(self._ui.REC_STATUS, "  Recording stopped unexpectedly, check files")
+                if writer.completed:
+                    dpg.set_value(self._ui.REC_STATUS, f"  Recording complete ({writer.accepted} frames)")
+                else:
+                    dpg.set_value(self._ui.REC_STATUS, "  Recording stopped unexpectedly, check files")
                 return
             elapsed = time.time() - self._state.record_start_time
             h = int(elapsed // 3600)
@@ -430,19 +395,9 @@ class UIController:
 
     # mouse events
 
-    def _on_dark_clear(self) -> None:
-        session = self._manager.get_session(self._state.active_cam_id)
-        if session is None:
-            return
-        session.dark_image = None
-        dpg.set_value(self._ui.INP_DARKPATH, "")
-
     def _on_mouse_down(self, s, a) -> None:
         if self._state.camera_state == CameraState.RECORDING:
             return
-        session = self._manager.get_session(self._state.active_cam_id)
-        if session and session.dark_image is not None:
-            return  # ROI is locked while a dark image is applied to prevent shape mismatch
         mx, my = self._local_mouse()
         if not self._is_over_drawlist(mx, my):
             return

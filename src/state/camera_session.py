@@ -16,19 +16,7 @@ class CameraSession:
         self.is_connected: bool= False
         self.roi_set: ROISet= ROISet()
         self.data: SCOSTimeSeries = SCOSTimeSeries()
-        self.last_frame: np.ndarray | None = None  # most recent full frame, used for dark capture preview
-        self._dark_image: np.ndarray | None = None
-
-    @property
-    def dark_image(self) -> np.ndarray | None:
-        return self._dark_image
-
-    @dark_image.setter
-    def dark_image(self, img: np.ndarray | None) -> None:
-        # keep a reference here AND push to the pipeline so both stay in sync
-        # important: the image must already be cropped to ROI "1" before setting
-        self._dark_image = img
-        self.pipeline.set_dark_image(img)
+        self.last_frame: np.ndarray | None = None  # most recent full frame shown in the UI
 
     def sync_pipeline_roi(self) -> None:
         # push the current ROI (in sensor pixels) down to the pipeline

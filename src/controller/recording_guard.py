@@ -6,7 +6,7 @@ import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from config import CAMERA_BIT_DEPTH
+from config import CAMERA_BIT_DEPTH, CAMERA_W, CAMERA_H
 from controller.camera_manager import CameraManager
 from recording.frame_writer import SessionMeta
 from state.app_state import AppState
@@ -43,12 +43,6 @@ def check(manager: CameraManager, state: AppState, session_meta: SessionMeta) ->
     except Exception:
         errors.append(f"Output folder is not writable: {folder}")
 
-    # dark image loaded per recording camera (warning only)
-    for cam_id in recording_ids:
-        session = manager.get_session(cam_id)
-        if session is not None and session.dark_image is None:
-            warnings.append(f"No dark image for SN:{cam_id} — dark subtraction will be skipped.")
-
     # disk space estimate — tell operator how long they can record
     if recording_ids:
         info.append(_disk_estimate(manager, recording_ids, folder, session_meta.interval_ms))
@@ -57,24 +51,11 @@ def check(manager: CameraManager, state: AppState, session_meta: SessionMeta) ->
 
 
 def _disk_estimate(manager: CameraManager, recording_ids: list[str], folder: Path, interval_ms: float) -> str:
-    # pick ROI size from first recording camera
-    roi_w, roi_h = 0, 0
-    for cam_id in recording_ids:
-        session = manager.get_session(cam_id)
-        if session is not None:
-            roi = session.roi_set.to_pixels("1")
-            if roi:
-                roi_w = roi[2] - roi[0]  # x2 - x1
-                roi_h = roi[3] - roi[1]  # y2 - y1
-            break
-
-    if roi_w == 0 or roi_h == 0:
-        return "Disk estimate unavailable — ROI not set."
-
+    # recordings are always full sensor frames
     # bytes written per frame per camera
     # CAMERA_BIT_DEPTH // 8 = 1 for Mono8, 2 for Mono12/Mono16
     bytes_per_pixel = CAMERA_BIT_DEPTH // 8
-    bytes_per_frame = roi_w * roi_h * bytes_per_pixel
+    bytes_per_frame = CAMERA_W * CAMERA_H * bytes_per_pixel
 
     # effective fps: user-set interval or camera hardware fps
     if interval_ms > 0:
@@ -98,7 +79,7 @@ def _disk_estimate(manager: CameraManager, recording_ids: list[str], folder: Pat
         return (
             f"Free disk: {free_gb:.1f} GB — "
             f"enough for ~{free_minutes:.0f} min "
-            f"({n_cameras} cam(s), {fps:.0f} fps, {roi_w}x{roi_h} ROI, "
+            f"({n_cameras} cam(s), {fps:.0f} fps, {CAMERA_W}x{CAMERA_H} full frame, "
             f"{bytes_per_sec / 1_000_000:.0f} MB/s)"
         )
 
