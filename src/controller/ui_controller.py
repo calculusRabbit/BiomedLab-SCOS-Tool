@@ -26,7 +26,9 @@ from config import (
 )
 from controller.camera_manager import CameraManager
 from controller.recording_guard import check as guard_check
+from controller.trigger_manager import TriggerManager
 from recording.frame_writer import SessionMeta
+from recording.trigger_writer import TriggerWriter
 from controller.roi_selector import ROISelector
 from processing.scos_result import SCOSResult
 from processing.utils import to_display_texture
@@ -44,6 +46,8 @@ class UIController:
         self._state = app_state
         self._last_size = (0, 0)
         self._rois: dict[str, ROISelector] = {}  # one ROISelector per ROI name ("1", "2")
+        self._trigger = TriggerManager()
+        self._trigger_writer = TriggerWriter()
 
     # setup
 
@@ -76,6 +80,7 @@ class UIController:
         dpg.set_item_callback(self._ui.SLD_GAIN, self._on_gain_change)
         dpg.set_item_callback(self._ui.SLD_EXPOSURE, self._on_exposure_change)
         dpg.set_item_callback(self._ui.BTN_REC_BROWSE, self._on_rec_browse)
+        dpg.set_item_callback(self._ui.BTN_TRIGGER_SCAN, self._on_trigger_scan)
         dpg.set_item_callback(self._ui.BTN_TRIGGER_CONNECT, self._on_trigger_connect)
 
         self.sync_ui()
@@ -108,6 +113,14 @@ class UIController:
             t = time.time() - session.data.start_time
             session.data.push(t, output)
 
+        # drain trigger markers (non-blocking) — log to file while recording,
+        # otherwise just print so the connection can be verified
+        for marker, pc_time in self._trigger.poll():
+            if self._state.camera_state == CameraState.RECORDING:
+                self._trigger_writer.push(pc_time, marker)
+            else:
+                print(f"[Trigger] {marker}")
+
         # only push display data for the camera currently selected in the dropdown
         active = self._manager.get_session(self._state.active_cam_id)
         if active is None:
@@ -135,22 +148,29 @@ class UIController:
         self._rebuild_rec_checkboxes(cameras)
         self._switch_to(cameras[0][0])  # default to first camera found
         self._state.camera_state = CameraState.IDLE
-        self._on_trigger_scan()
         self.sync_ui()
 
     def _on_trigger_scan(self) -> None:
-        # placeholder: scan for available trigger sources and populate the trigger dropdown
-        pass
+        # scan for available LSL marker streams and populate the trigger dropdown
+        # (the resolver warms up in the background — a scan right after launch may
+        # come back empty, clicking Scan again a second later finds the streams)
+        names = self._trigger.scan()
+        dpg.configure_item(self._ui.TRIGGER_DROPDOWN, items=names)
+        if names:
+            dpg.set_value(self._ui.TRIGGER_DROPDOWN, names[0])
+        print(f"[Trigger] scan found {len(names)} stream(s): {names}")
 
     def _on_trigger_connect(self) -> None:
-        # placeholder: connect to the selected trigger source and listen for signals
-        print("called from _on_trigger_connect()")
-        pass
-
-    def _on_trigger_received(self) -> None:
-        # placeholder: called when a trigger signal arrives to start recording automatically
-        # self._on_rec_start()
-        pass
+        # connect to the marker stream selected in the dropdown; markers are then
+        # drained every frame in update()
+        name = dpg.get_value(self._ui.TRIGGER_DROPDOWN)
+        if not name:
+            print("[Trigger] no stream selected — click Scan first")
+            return
+        if self._trigger.connect(name):
+            print(f"[Trigger] connected to '{name}'")
+        else:
+            print(f"[Trigger] stream '{name}' not found — rescan and try again")
 
     def _on_connect(self) -> None:
         cam_id = self._selected_cam_id()
@@ -251,6 +271,9 @@ class UIController:
                 session.sync_pipeline_roi()
                 session.pipeline.start_recording(session_meta)
 
+        # marker log opens/closes with the recording session
+        self._trigger_writer.start(session_meta)
+
         self._state.camera_state = CameraState.RECORDING
         self._state.record_start_time = time.time()
         self.sync_ui()
@@ -271,6 +294,7 @@ class UIController:
         for cam_id in self._manager.connected_ids():
             session = self._manager.get_session(cam_id)
             session.pipeline.stop_recording()
+        self._trigger_writer.stop()
         self._state.camera_state = CameraState.CONNECTED
         self._set_rec_status("")
         self.sync_ui()
@@ -299,6 +323,7 @@ class UIController:
             s = self._manager.get_session(cid)
             if s:
                 s.pipeline.stop_recording()
+        self._trigger_writer.stop()
         self._state.camera_state = CameraState.IDLE
         self._state.preview_on = False
         self._set_rec_status("  Camera error, please rescan", error=True)
@@ -336,8 +361,9 @@ class UIController:
 
     def _set_rec_status(self, text: str, error: bool = False) -> None:
         # errors are shown in red so they cannot be missed
+        # (-255, 0, 0, 255) is DearPyGui's sentinel for "use the theme's default color"
         dpg.set_value(self._ui.REC_STATUS, text)
-        dpg.configure_item(self._ui.REC_STATUS, color=(255, 90, 90) if error else (255, 255, 255))
+        dpg.configure_item(self._ui.REC_STATUS, color=(255, 90, 90) if error else (-255, 0, 0, 255))
 
     # status update (called every frame while streaming)
 

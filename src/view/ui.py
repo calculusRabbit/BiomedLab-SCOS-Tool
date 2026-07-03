@@ -77,6 +77,7 @@ class SCOS_UI:
 
     # trigger source
     TRIGGER_DROPDOWN = "dd_trigger"
+    BTN_TRIGGER_SCAN = "btn_trigger_scan"
     BTN_TRIGGER_CONNECT = "btn_trigger_connect"
 
     # K² spatial map panel
@@ -324,6 +325,7 @@ class SCOS_UI:
             with dpg.group(horizontal=True):
                 dpg.add_text("Trigger source:")
                 dpg.add_combo([], tag=self.TRIGGER_DROPDOWN, width=100)
+                dpg.add_button(label="Scan", tag=self.BTN_TRIGGER_SCAN)
                 dpg.add_button(label="Connect", tag=self.BTN_TRIGGER_CONNECT)
                 dpg.add_text("Time scale:")
                 dpg.add_input_int(default_value=0, width=100)
