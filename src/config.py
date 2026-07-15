@@ -47,6 +47,9 @@ CAMERA_DEFAULT_EXPOSURE = 20000.0
 # Recording
 RECORD_QUEUE_SIZE = 500  # max frames held in RAM (~440 MB at 1920×1200 Mono8)
 
+# Debug
+PRINT_PIPELINE_STATS = False  # set True to log FPS stats to the terminal every 2 s
+
 # Add a new ROI by adding one entry here — name: RGBA color tuple.
 # The displayed label is "roi_<name>". ROI "1" is the one used for
 # processing/recording. The default position for each ROI lives in

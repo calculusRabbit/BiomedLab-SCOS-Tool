@@ -17,16 +17,16 @@ class TriggerManager:
     # experiment-level events, not per-camera ones.
 
     def __init__(self):
-        self._resolver: ContinuousResolver | None = None  # created lazily, then kept forever
+        # start discovery immediately so the resolver's ~1s warm-up overlaps
+        # app startup — by the time the user can click Scan, results are ready
+        self._resolver = ContinuousResolver("type", "Markers")
         self._streams: dict[str, StreamInfo] = {}  # name -> info from the last scan
         self._inlet: StreamInlet | None = None
 
     def scan(self) -> list[str]:
-        # returns the names of all "Markers" streams currently visible.
-        # The first scan right after the resolver is created may return [] while
-        # it warms up (~1s) — clicking Scan again picks up the streams.
-        if self._resolver is None:
-            self._resolver = ContinuousResolver("type", "Markers")
+        # Discovery runs continuously in the background, so this is an instant
+        # read of the current network state — Scan just refreshes the list,
+        # picking up streams that appeared or disappeared since the last click.
         self._streams = {s.name(): s for s in self._resolver.results()}
         return list(self._streams.keys())
 

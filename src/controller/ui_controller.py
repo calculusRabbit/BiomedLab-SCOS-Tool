@@ -113,13 +113,12 @@ class UIController:
             t = time.time() - session.data.start_time
             session.data.push(t, output)
 
-        # drain trigger markers (non-blocking) — log to file while recording,
-        # otherwise just print so the connection can be verified
+        # drain trigger markers (non-blocking) — always print so receipt is
+        # visible in the terminal; also log to file while recording
         for marker, pc_time in self._trigger.poll():
+            print(f"[Trigger] {marker}")
             if self._state.camera_state == CameraState.RECORDING:
                 self._trigger_writer.push(pc_time, marker)
-            else:
-                print(f"[Trigger] {marker}")
 
         # only push display data for the camera currently selected in the dropdown
         active = self._manager.get_session(self._state.active_cam_id)
@@ -151,9 +150,8 @@ class UIController:
         self.sync_ui()
 
     def _on_trigger_scan(self) -> None:
-        # scan for available LSL marker streams and populate the trigger dropdown
-        # (the resolver warms up in the background — a scan right after launch may
-        # come back empty, clicking Scan again a second later finds the streams)
+        # refresh the trigger dropdown with the LSL marker streams currently
+        # visible on the network (discovery runs continuously since app start)
         names = self._trigger.scan()
         dpg.configure_item(self._ui.TRIGGER_DROPDOWN, items=names)
         if names:

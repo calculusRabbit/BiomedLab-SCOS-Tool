@@ -15,7 +15,7 @@ import time
 
 import numpy as np
 
-from config import CAMERA_PIXEL_FORMAT, CAMERA_W, CAMERA_H
+from config import CAMERA_PIXEL_FORMAT, CAMERA_W, CAMERA_H, PRINT_PIPELINE_STATS
 from hardware.base_camera import BaseCamera
 from processing.processor import Processor
 from processing.utils import crop_frame
@@ -229,7 +229,8 @@ class Pipeline:
     # stats
 
     def _update_stats(self) -> None:
-        # recalculate FPS every 2 seconds and print to console
+        # recalculate FPS every 2 seconds for the UI status panel
+        # (console print is off by default — flip PRINT_PIPELINE_STATS in config.py)
         now = time.time()
         interval = now - self._log_time
         if interval < 2.0:
@@ -238,13 +239,14 @@ class Pipeline:
         self.fps_camera = self._grabbed / interval
         self.fps_processed = self._processed / interval
 
-        print(
-            f"[Pipeline] t={now - self._start_time:.1f}s | "
-            f"camera: {self.fps_camera:.1f} fps | "
-            f"processed: {self.fps_processed:.1f} fps | "
-            f"total: {self.total_processed} | "
-            f"dropped: {self.drop_processed}"
-        )
+        if PRINT_PIPELINE_STATS:
+            print(
+                f"[Pipeline] t={now - self._start_time:.1f}s | "
+                f"camera: {self.fps_camera:.1f} fps | "
+                f"processed: {self.fps_processed:.1f} fps | "
+                f"total: {self.total_processed} | "
+                f"dropped: {self.drop_processed}"
+            )
 
         self._grabbed = self._processed = 0
         self._log_time = now
