@@ -2,6 +2,8 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
+from config import GAIN_RANGE, EXPOSURE_RANGE_US
+
 
 class BaseCamera(ABC):
 
@@ -39,6 +41,14 @@ class BaseCamera(ABC):
 
     def set_exposure_time(self, value: float) -> None:
         pass
+
+    def get_gain_range(self) -> tuple[float, float]:
+        """(min, max) gain the camera accepts; config fallback if unknown."""
+        return GAIN_RANGE
+
+    def get_exposure_range(self) -> tuple[float, float]:
+        """(min, max) exposure time in µs the camera accepts; config fallback if unknown."""
+        return EXPOSURE_RANGE_US
 
     def get_serial(self) -> str:
         return ""

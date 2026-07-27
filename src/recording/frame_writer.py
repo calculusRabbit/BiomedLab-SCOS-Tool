@@ -4,7 +4,8 @@
 #   attrs:          study_name, subject_id, run_number, camera_id, gain_db,
 #                   exposure_us, pixel_format, tick_frequency_hz,
 #                   pc_start_time_unix, pc_end_time_unix, interval_ms,
-#                   max_frames, max_seconds
+#                   max_frames, max_seconds, processing_roi,
+#                   roi_<name>_normalized_xyxy, roi_<name>_pixels_xyxy
 #   frames          (N, H, W) uint8   full-sensor raw frames
 #   pc_time         (N,)      float64 PC wall-clock time at grab (seconds)
 #   camera_time     (N,)      int64   hardware timestamp in ticks (-1 if unavailable)
@@ -64,6 +65,9 @@ class CameraMeta:
     pixel_format: str
     tick_frequency_hz: int | None
     pc_start_time_unix: float
+    # ROI snapshot at record start: {name: {"normalized_xyxy": (x1,y1,x2,y2),
+    # "pixels_xyxy": (x1,y1,x2,y2)}} — pixels are full-sensor coordinates
+    rois: dict | None = None
 
 
 CHUNK = 128
@@ -211,7 +215,9 @@ class FrameWriter:
             frame_counter_buf = np.empty(CHUNK, dtype="int64"),
         )
 
-        batch = []
+        # the first frame was consumed to learn the shape/dtype — it still
+        # has to be written, so it seeds the batch
+        batch = [first]
         try:
             file, ds = self.open_file(frame_shape, frame_dtype)
         except Exception as e:
@@ -313,6 +319,12 @@ class FrameWriter:
         file.attrs["pixel_format"] = c.pixel_format
         file.attrs["tick_frequency_hz"] = c.tick_frequency_hz if c.tick_frequency_hz is not None else -1
         file.attrs["pc_start_time_unix"] = c.pc_start_time_unix
+        if c.rois:
+            # ROI "1" is the one that feeds the SCOS processing
+            file.attrs["processing_roi"] = "1"
+            for name, coords in c.rois.items():
+                file.attrs[f"roi_{name}_normalized_xyxy"] = np.asarray(coords["normalized_xyxy"], dtype="float64")
+                file.attrs[f"roi_{name}_pixels_xyxy"] = np.asarray(coords["pixels_xyxy"], dtype="int64")
 
     def create_datasets(self, file, frame_shape, frame_dtype):
         h, w = frame_shape

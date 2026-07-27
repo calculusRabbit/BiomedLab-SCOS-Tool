@@ -46,6 +46,7 @@ class UIController:
         self._state = app_state
         self._last_size = (0, 0)
         self._rois: dict[str, ROISelector] = {}  # one ROISelector per ROI name ("1", "2")
+        self._plot_window_sec = PLOT_WINDOW_SEC  # visible x-range, user-adjustable
         self._trigger = TriggerManager()
         self._trigger_writer = TriggerWriter()
 
@@ -76,6 +77,7 @@ class UIController:
         dpg.set_item_callback(self._ui.BTN_START, self._on_rec_start)
         dpg.set_item_callback(self._ui.BTN_STOP, self._on_rec_stop)
         dpg.set_item_callback(self._ui.BTN_AUTOSCALE, self._on_autoscale)
+        dpg.set_item_callback(self._ui.INP_TIME_WINDOW, self._on_time_window_change)
         dpg.set_item_callback(self._ui.DEVICE_DROPDOWN, self._on_dropdown_change)
         dpg.set_item_callback(self._ui.SLD_GAIN, self._on_gain_change)
         dpg.set_item_callback(self._ui.SLD_EXPOSURE, self._on_exposure_change)
@@ -179,6 +181,8 @@ class UIController:
             return
         # push the current ROI to the pipeline so it is ready before preview starts
         session.sync_pipeline_roi()
+        # sliders now reflect this camera's true hardware limits
+        self._sync_param_sliders(session)
         # connecting implies intent to use the camera — pre-check its recording
         # checkbox (the user can still uncheck it)
         if dpg.does_item_exist(self._rec_checkbox_tag(cam_id)):
@@ -267,7 +271,16 @@ class UIController:
             if cam_id in self._state.record_cam_ids:
                 session = self._manager.get_session(cam_id)
                 session.sync_pipeline_roi()
-                session.pipeline.start_recording(session_meta)
+                # snapshot this camera's ROI boxes so they are saved in the h5 file
+                # (ROIs cannot be moved while recording, so one snapshot is exact)
+                rois = {
+                    name: {
+                        "normalized_xyxy": session.roi_set.get(name),
+                        "pixels_xyxy": session.roi_set.to_pixels(name),
+                    }
+                    for name in session.roi_set.names()
+                }
+                session.pipeline.start_recording(session_meta, rois)
 
         # marker log opens/closes with the recording session
         self._trigger_writer.start(session_meta)
@@ -297,11 +310,30 @@ class UIController:
         self._set_rec_status("")
         self.sync_ui()
 
+    def _on_time_window_change(self) -> None:
+        self._plot_window_sec = float(dpg.get_value(self._ui.INP_TIME_WINDOW))
+
     def _on_autoscale(self) -> None:
-        # fit the y-axis of every plot to its current data range
-        for tag in self._ui.GRAPH_TAG:
-            y_tag = dpg.get_item_children(tag, 1)[1]
-            dpg.fit_axis_data(y_tag)
+        # fit the y-axis of every plot to the data currently visible in the
+        # x-window. dpg.fit_axis_data is not used because it fits the whole
+        # series history (including points scrolled off-screen) and breaks on
+        # the inf/NaN samples that OD can produce.
+        session = self._manager.get_session(self._state.active_cam_id)
+        if session is None:
+            return
+        t, k2, bfi, cc, od = session.data.as_lists()
+        if not t:
+            return
+        t = np.asarray(t)
+        visible = t >= t[-1] - self._plot_window_sec
+        for i, series in enumerate([k2, bfi, cc, od]):
+            values = np.asarray(series)[visible]
+            values = values[np.isfinite(values)]
+            if values.size == 0:
+                continue
+            lo, hi = float(values.min()), float(values.max())
+            pad = 0.05 * (hi - lo) or max(abs(hi) * 0.05, 1e-6)  # flat line: pad relative to magnitude
+            dpg.set_axis_limits(self._ui.GRAPH_Y_TAG[i], lo - pad, hi + pad)
 
     def _on_rec_cam_toggle(self, cam_id: str, checked: bool) -> None:
         # called when user checks or unchecks a camera in the recording panel
@@ -476,10 +508,11 @@ class UIController:
             return
         for i, series in enumerate([k2, bfi, cc, od]):
             dpg.set_value(self._ui.PLOT_SERIES_TAG[i], [t, series])
-        # keep the x-axis scrolling so the last PLOT_WINDOW_SEC of data is always visible
-        t_max = max(PLOT_WINDOW_SEC, t[-1]) + 0.5
+        # keep the x-axis scrolling so the last _plot_window_sec of data is always visible
+        window = self._plot_window_sec
+        t_max = max(window, t[-1]) + 0.5
         for x_tag in self._ui.GRAPH_X_TAG:
-            dpg.set_axis_limits(x_tag, t_max - PLOT_WINDOW_SEC, t_max)
+            dpg.set_axis_limits(x_tag, t_max - window, t_max)
 
     def _push_k2_maps(self, output: SCOSResult) -> None:
         # update each of the 6 K2 spatial map images in the top panel
@@ -504,8 +537,16 @@ class UIController:
         self._on_autoscale()
         self._clear_live_feed()
         if session and session.is_connected:
-            dpg.set_value(self._ui.SLD_GAIN,     session.pipeline.get_gain())
-            dpg.set_value(self._ui.SLD_EXPOSURE, session.pipeline.get_exposure_time())
+            self._sync_param_sliders(session)
+
+    def _sync_param_sliders(self, session) -> None:
+        # show the connected camera's true hardware limits and current values
+        gain_lo, gain_hi = session.pipeline.get_gain_range()
+        exp_lo, exp_hi = session.pipeline.get_exposure_range()
+        dpg.configure_item(self._ui.SLD_GAIN, min_value=gain_lo, max_value=gain_hi)
+        dpg.configure_item(self._ui.SLD_EXPOSURE, min_value=exp_lo, max_value=exp_hi)
+        dpg.set_value(self._ui.SLD_GAIN,     session.pipeline.get_gain())
+        dpg.set_value(self._ui.SLD_EXPOSURE, session.pipeline.get_exposure_time())
 
     def _clear_live_feed(self) -> None:
         blank = np.zeros(TEXTURE_W * TEXTURE_H * 3, dtype=np.float32)

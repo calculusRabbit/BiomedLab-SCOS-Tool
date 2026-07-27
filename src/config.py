@@ -27,8 +27,8 @@ K2_TEXTURE_H = 2**7
 TEMPORAL_BUFFER_SIZE = 50
 
 # Scrolling plot
-MAX_PLOT_POINTS = 200
-PLOT_WINDOW_SEC = 10.0
+MAX_PLOT_POINTS = 3000  # ~60 s of history at 50 processed fps
+PLOT_WINDOW_SEC = 10.0  # default visible x-range, adjustable in the UI
 
 # UI layout
 PADDING = 8
@@ -43,6 +43,12 @@ HANDLE_RADIUS = 6
 # Camera defaults
 CAMERA_DEFAULT_GAIN = 10.0
 CAMERA_DEFAULT_EXPOSURE = 20000.0
+
+# Fallback (min, max) ranges for the UI sliders — used before a camera is
+# connected and by cameras that cannot report their own limits. A connected
+# Basler camera overrides these with its true hardware limits.
+GAIN_RANGE = (0.0, 48.0)            # dB
+EXPOSURE_RANGE_US = (10.0, 1_000_000.0)  # µs (up to 1 s)
 
 # Recording
 RECORD_QUEUE_SIZE = 500  # max frames held in RAM (~440 MB at 1920×1200 Mono8)

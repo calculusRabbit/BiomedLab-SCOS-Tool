@@ -122,11 +122,19 @@ class Pipeline:
     def set_exposure_time(self, value: float) -> None:
         self._camera.set_exposure_time(value)
 
+    def get_gain_range(self) -> tuple[float, float]:
+        return self._camera.get_gain_range()
+
+    def get_exposure_range(self) -> tuple[float, float]:
+        return self._camera.get_exposure_range()
+
     # recording
 
-    def start_recording(self, session_meta: SessionMeta) -> None:
+    def start_recording(self, session_meta: SessionMeta, rois: dict | None = None) -> None:
         # collect per-camera metadata at the moment recording starts, then hand off to FrameWriter
+        # rois: {name: {"normalized_xyxy": (...), "pixels_xyxy": (...)}} snapshot from the UI
         camera_meta = CameraMeta(
+            rois=rois,
             camera_serial=self._camera.get_serial(),
             camera_model=self._camera.get_model(),
             gain_db=self._camera.get_gain(),

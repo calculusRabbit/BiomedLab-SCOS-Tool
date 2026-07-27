@@ -148,7 +148,9 @@ class Camera(BaseCamera):
 
     def set_gain(self, value: float) -> None:
         if self._camera and self._camera.IsOpen():
-            self._camera.Gain.Value = value
+            # clamp so a typed-in out-of-range value can't raise a GenICam error
+            lo, hi = self.get_gain_range()
+            self._camera.Gain.Value = min(max(value, lo), hi)
 
     def get_gain(self) -> float:
         if self._camera and self._camera.IsOpen():
@@ -157,12 +159,29 @@ class Camera(BaseCamera):
 
     def set_exposure_time(self, value: float) -> None:
         if self._camera and self._camera.IsOpen():
-            self._camera.ExposureTime.Value = value
+            lo, hi = self.get_exposure_range()
+            self._camera.ExposureTime.Value = min(max(value, lo), hi)
 
     def get_exposure_time(self) -> float:
         if self._camera and self._camera.IsOpen():
             return self._camera.ExposureTime.Value
         return 0.0
+
+    def get_gain_range(self) -> tuple[float, float]:
+        try:
+            if self._camera and self._camera.IsOpen() and self._camera.Gain.IsReadable():
+                return float(self._camera.Gain.Min), float(self._camera.Gain.Max)
+        except Exception as e:
+            print(f"[Camera.get_gain_range] {e}")
+        return super().get_gain_range()
+
+    def get_exposure_range(self) -> tuple[float, float]:
+        try:
+            if self._camera and self._camera.IsOpen() and self._camera.ExposureTime.IsReadable():
+                return float(self._camera.ExposureTime.Min), float(self._camera.ExposureTime.Max)
+        except Exception as e:
+            print(f"[Camera.get_exposure_range] {e}")
+        return super().get_exposure_range()
 
     def get_tick_frequency_hz(self) -> int | None:
         if not self._camera or not self._camera.IsOpen():
