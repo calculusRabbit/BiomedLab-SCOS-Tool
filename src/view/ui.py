@@ -11,6 +11,9 @@ from config import (
     TEXTURE_W, TEXTURE_H,
     CAM_HEIGHT_RATIO, DEVICE_WIDTH_RATIO, ROI_BTN_HEIGHT,
     K2_TEXTURE_W, K2_TEXTURE_H,
+    CAMERA_DEFAULT_GAIN, CAMERA_DEFAULT_EXPOSURE,
+    GAIN_RANGE, EXPOSURE_RANGE_US,
+    PLOT_WINDOW_SEC,
 )
 
 
@@ -74,6 +77,7 @@ class SCOS_UI:
     BTN_PAUSE = "btn_pause"
     BTN_STOP = "btn_stop"
     BTN_AUTOSCALE = "btn_fit_y"
+    INP_TIME_WINDOW = "inp_time_window"
 
     # trigger source
     TRIGGER_DROPDOWN = "dd_trigger"
@@ -89,6 +93,7 @@ class SCOS_UI:
     # Right-side time series plots
     GRAPH_TAG = ["K2",   "BFI",   "CC",   "OD"]
     GRAPH_X_TAG = ["K2_x", "BFI_x", "CC_x", "OD_x"]
+    GRAPH_Y_TAG = ["K2_y", "BFI_y", "CC_y", "OD_y"]
     PLOT_SERIES_TAG = ["K2_s", "BFI_s", "CC_s", "OD_s"]
 
     _ROI_BUTTONS = [
@@ -217,14 +222,20 @@ class SCOS_UI:
             with dpg.table(header_row=False, policy=dpg.mvTable_SizingStretchProp, pad_outerX=True):
                 dpg.add_table_column(width_fixed=True, init_width_or_weight=90)
                 dpg.add_table_column(width_stretch=True)
+                # fallback ranges from config — replaced with the camera's true
+                # hardware limits by the controller once a camera is connected
                 with dpg.table_row():
                     dpg.add_text("Gain")
-                    dpg.add_slider_float(tag=self.SLD_GAIN, min_value=0.0, max_value=24.0,
-                                         default_value=10.0, format="%.1f dB", width=-1)
+                    dpg.add_slider_float(tag=self.SLD_GAIN,
+                                         min_value=GAIN_RANGE[0], max_value=GAIN_RANGE[1],
+                                         default_value=CAMERA_DEFAULT_GAIN,
+                                         format="%.1f dB", width=-1)
                 with dpg.table_row():
                     dpg.add_text("Exposure")
-                    dpg.add_slider_float(tag=self.SLD_EXPOSURE, min_value=100.0, max_value=100000.0,
-                                         default_value=20000.0, format="%.0f µs", width=-1)
+                    dpg.add_slider_float(tag=self.SLD_EXPOSURE,
+                                         min_value=EXPOSURE_RANGE_US[0], max_value=EXPOSURE_RANGE_US[1],
+                                         default_value=CAMERA_DEFAULT_EXPOSURE,
+                                         format="%.0f µs", width=-1)
 
             dpg.add_separator()
             self._recording_panel()
@@ -327,8 +338,10 @@ class SCOS_UI:
                 dpg.add_combo([], tag=self.TRIGGER_DROPDOWN, width=100)
                 dpg.add_button(label="Scan", tag=self.BTN_TRIGGER_SCAN)
                 dpg.add_button(label="Connect", tag=self.BTN_TRIGGER_CONNECT)
-                dpg.add_text("Time scale:")
-                dpg.add_input_int(default_value=0, width=100)
+                dpg.add_text("X range (s):")
+                dpg.add_input_int(tag=self.INP_TIME_WINDOW,
+                                  default_value=int(PLOT_WINDOW_SEC),
+                                  min_value=1, min_clamped=True, width=100)
                 dpg.add_button(label="Auto Scale (Fit Y)", tag=self.BTN_AUTOSCALE)
 
     def _plots_panel(self, lo: _Layout) -> None:
@@ -338,5 +351,6 @@ class SCOS_UI:
                           height=lo.plot_h, width=-1, no_mouse_pos=True):
                 dpg.add_plot_axis(dpg.mvXAxis, label="time (s)",
                                   no_gridlines=True, tag=self.GRAPH_X_TAG[i])
-                y = dpg.add_plot_axis(dpg.mvYAxis, label=label, no_gridlines=True)
+                y = dpg.add_plot_axis(dpg.mvYAxis, label=label, no_gridlines=True,
+                                      tag=self.GRAPH_Y_TAG[i])
                 dpg.add_line_series([], [], parent=y, tag=self.PLOT_SERIES_TAG[i])
