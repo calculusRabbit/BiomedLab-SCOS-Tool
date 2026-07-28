@@ -9,10 +9,10 @@ VIEWPORT_MIN_H = 550
 # Real camera sensor resolution (used for ROI pixel calculations)
 CAMERA_W = 1920
 CAMERA_H = 1200
-CAMERA_PIXEL_FORMAT = "Mono8" # Mono 8 => range(0-255)  ||  Mono 12 => range(0-4095) but 2x slower transfer, but also MOST DETAIL
+CAMERA_PIXEL_FORMAT = "Mono10p" # Mono8 => 0-255 | Mono10p => 0-1023, packed (+25% bandwidth) | Mono12 => 0-4095, 2x bandwidth
 
 # Derived from bit depth — used for normalization
-CAMERA_BIT_DEPTH = 8  # change to 10 or 12 if needed but have to be match above CAMERA_PIXEL_FORMAT
+CAMERA_BIT_DEPTH = 10  # must match CAMERA_PIXEL_FORMAT above (8 for Mono8, 10 for Mono10p, 12 for Mono12)
 CAMERA_PIXEL_MAX = float(2**CAMERA_BIT_DEPTH - 1) # 255.0, 1023.0, 4095.0
 
 # Display texture resolution (used for live feed display)
@@ -41,8 +41,8 @@ ROI_BTN_HEIGHT = 32
 HANDLE_RADIUS = 6
 
 # Camera defaults
-CAMERA_DEFAULT_GAIN = 10.0
-CAMERA_DEFAULT_EXPOSURE = 20000.0
+CAMERA_DEFAULT_GAIN = 12.0
+CAMERA_DEFAULT_EXPOSURE = 4000.0
 
 # Fallback (min, max) ranges for the UI sliders — used before a camera is
 # connected and by cameras that cannot report their own limits. A connected
