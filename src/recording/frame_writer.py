@@ -6,7 +6,7 @@
 #                   pc_start_time_unix, pc_end_time_unix, interval_ms,
 #                   max_frames, max_seconds, processing_roi,
 #                   roi_<name>_normalized_xyxy, roi_<name>_pixels_xyxy
-#   frames          (N, H, W) uint8   full-sensor raw frames
+#   frames          (N, H, W) uint8/uint16 (dtype follows pixel format)  full-sensor raw frames
 #   pc_time         (N,)      float64 PC wall-clock time at grab (seconds)
 #   camera_time     (N,)      int64   hardware timestamp in ticks (-1 if unavailable)
 #   frame_counter   (N,)      int64   hardware frame ID (-1 if unavailable)

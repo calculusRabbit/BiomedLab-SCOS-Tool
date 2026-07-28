@@ -53,8 +53,8 @@ def check(manager: CameraManager, state: AppState, session_meta: SessionMeta) ->
 def _disk_estimate(manager: CameraManager, recording_ids: list[str], folder: Path, interval_ms: float) -> str:
     # recordings are always full sensor frames
     # bytes written per frame per camera
-    # CAMERA_BIT_DEPTH // 8 = 1 for Mono8, 2 for Mono12/Mono16
-    bytes_per_pixel = CAMERA_BIT_DEPTH // 8
+    # ceil(bits/8): 1 byte for Mono8, 2 for Mono10p/Mono12 (pypylon unpacks to uint16)
+    bytes_per_pixel = (CAMERA_BIT_DEPTH + 7) // 8
     bytes_per_frame = CAMERA_W * CAMERA_H * bytes_per_pixel
 
     # effective fps: user-set interval or camera hardware fps
