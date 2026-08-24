@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 
 from hardware.base_camera import BaseCamera
-from config import CAMERA_DEFAULT_GAIN, CAMERA_DEFAULT_EXPOSURE
+from config import CAMERA_DEFAULT_GAIN, CAMERA_DEFAULT_EXPOSURE, CAMERA_BIT_DEPTH
 
 
 class DebugCamera(BaseCamera):
@@ -46,6 +46,11 @@ class DebugCamera(BaseCamera):
 
         if frame is None:
             return None
+
+        # PNGs are 8-bit; shift up so debug frames span the same value range
+        # as the real camera's pixel format (e.g. 0-1023 for Mono10p)
+        if CAMERA_BIT_DEPTH > 8:
+            frame = frame.astype(np.uint16) << (CAMERA_BIT_DEPTH - 8)
 
         self._next_frame_time += 1.0 / self.target_fps
         remaining = self._next_frame_time - time.time()

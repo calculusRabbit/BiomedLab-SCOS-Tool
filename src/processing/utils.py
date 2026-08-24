@@ -30,14 +30,21 @@ def crop_frame(frame: np.ndarray, roi_pixels: tuple[int, int, int, int]) -> np.n
     return frame
 
 
-def to_display_texture(img: np.ndarray, w: int, h: int) -> np.ndarray:
-    # Resize -> normalize to [0, 1] -> flat float32 RGB for dpg.set_value().
+def to_display_texture(img: np.ndarray, w: int, h: int, normalize: bool = True) -> np.ndarray:
+    # Resize -> scale to [0, 1] -> flat float32 RGB for dpg.set_value().
     # NaN values (from zero-mean windows) are zeroed before resize so cv2 behaves correctly.
+    # normalize=True: min-max stretch to full contrast (K2 maps — no fixed value range).
+    # normalize=False: input is already in [0, 1] and is shown as-is, so screen
+    # brightness equals absolute pixel value (live feed — keeps the fixed
+    # 0..CAMERA_PIXEL_MAX color bar truthful).
     img = np.nan_to_num(img, nan=0.0).astype(np.float32)
     img = cv2.resize(img, (w, h))
-    mn, mx = img.min(), img.max()
-    if mx > mn:
-        img = (img - mn) / (mx - mn)
+    if normalize:
+        mn, mx = img.min(), img.max()
+        if mx > mn:
+            img = (img - mn) / (mx - mn)
+    else:
+        img = np.clip(img, 0.0, 1.0)
     return np.stack([img, img, img], axis=2).flatten()
 
 

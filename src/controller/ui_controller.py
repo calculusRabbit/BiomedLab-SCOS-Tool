@@ -498,8 +498,9 @@ class UIController:
     # display helpers
 
     def _push_frame(self, frame) -> None:
-        # normalize to [0,1] then convert to flat RGB float32 for the DearPyGUI texture
-        rgb = to_display_texture(frame / CAMERA_PIXEL_MAX, TEXTURE_W, TEXTURE_H)
+        # scale to [0,1] by bit depth and show as-is (no auto-stretch), so screen
+        # brightness is the absolute pixel value and matches the fixed color bar
+        rgb = to_display_texture(frame / CAMERA_PIXEL_MAX, TEXTURE_W, TEXTURE_H, normalize=False)
         dpg.set_value(self._ui.LIVE_TEXTURE, rgb)
 
     def _push_plots(self, data: SCOSTimeSeries) -> None:

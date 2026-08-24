@@ -9,7 +9,8 @@ import numpy as np
 from config import (
     PADDING, ITEM_SPACING,
     TEXTURE_W, TEXTURE_H,
-    CAM_HEIGHT_RATIO, DEVICE_WIDTH_RATIO, ROI_BTN_HEIGHT,
+    CAM_HEIGHT_RATIO, DEVICE_WIDTH_RATIO, ROI_BTN_HEIGHT, COLORBAR_W,
+    CAMERA_PIXEL_MAX,
     K2_TEXTURE_W, K2_TEXTURE_H,
     CAMERA_DEFAULT_GAIN, CAMERA_DEFAULT_EXPOSURE,
     GAIN_RANGE, EXPOSURE_RANGE_US,
@@ -70,6 +71,8 @@ class SCOS_UI:
 
     LIVE_TEXTURE = "tex_live"
     LIVE_IMAGE = "img_live"
+    LIVE_COLORBAR = "live_colorbar"
+    LIVE_COLORMAP = "live_colormap"
     ROI_DRAWLIST = "roi_drawlist"
 
     BTN_PREVIEW = "btn_preview"
@@ -120,7 +123,8 @@ class SCOS_UI:
         n_btns = len(self._ROI_BUTTONS)
         btn_area_h = n_btns * (ROI_BTN_HEIGHT + 8) + (n_btns - 1) * ITEM_SPACING
         roi_image_h = max(80, roi_panel_h - 60 - btn_area_h)
-        roi_image_w = inner_w - device_panel_w - ITEM_SPACING - 2 * PADDING
+        roi_image_w = (inner_w - device_panel_w - ITEM_SPACING - 2 * PADDING
+                       - COLORBAR_W - ITEM_SPACING)
 
         return _Layout(
             left_col_w = left_col_w,
@@ -149,6 +153,7 @@ class SCOS_UI:
         dpg.configure_item(self.PANEL_DEVICE, width=lo.device_panel_w)
         dpg.configure_item(self.ROI_DRAWLIST, width=lo.roi_image_w, height=lo.roi_image_h)
         dpg.configure_item(self.LIVE_IMAGE, pmax=(lo.roi_image_w, lo.roi_image_h))
+        dpg.configure_item(self.LIVE_COLORBAR, height=lo.roi_image_h)
         for tag in self.K2_MAP_TAG:
             dpg.configure_item(tag, width=lo.k2_map_bar_w)
         for tag in self.GRAPH_TAG:
@@ -314,11 +319,23 @@ class SCOS_UI:
                 dpg.add_raw_texture(width=TEXTURE_W, height=TEXTURE_H,
                                     tag=self.LIVE_TEXTURE, default_value=blank,
                                     format=dpg.mvFormat_Float_rgb)
-            with dpg.drawlist(tag=self.ROI_DRAWLIST,
-                              width=lo.roi_image_w, height=lo.roi_image_h):
-                dpg.draw_image(self.LIVE_TEXTURE,
-                               pmin=(0, 0), pmax=(lo.roi_image_w, lo.roi_image_h),
-                               tag=self.LIVE_IMAGE)
+            with dpg.group(horizontal=True):
+                with dpg.drawlist(tag=self.ROI_DRAWLIST,
+                                  width=lo.roi_image_w, height=lo.roi_image_h):
+                    dpg.draw_image(self.LIVE_TEXTURE,
+                                   pmin=(0, 0), pmax=(lo.roi_image_w, lo.roi_image_h),
+                                   tag=self.LIVE_IMAGE)
+                # fixed intensity scale: the live image shows absolute pixel values
+                # (no auto-stretch), so 0..CAMERA_PIXEL_MAX is always truthful.
+                # Custom black->white colormap: the built-in mvPlotColormap_*
+                # constants are not bindable items in some DPG versions.
+                with dpg.colormap_registry(show=False):
+                    dpg.add_colormap([(0, 0, 0, 255), (255, 255, 255, 255)],
+                                     qualitative=False, tag=self.LIVE_COLORMAP)
+                dpg.add_colormap_scale(tag=self.LIVE_COLORBAR,
+                                       min_scale=0.0, max_scale=CAMERA_PIXEL_MAX,
+                                       width=COLORBAR_W, height=lo.roi_image_h)
+                dpg.bind_colormap(self.LIVE_COLORBAR, self.LIVE_COLORMAP)
             with dpg.table(header_row=False, policy=dpg.mvTable_SizingStretchProp, pad_outerX=True):
                 dpg.add_table_column()
                 for label, tag in self._ROI_BUTTONS:
