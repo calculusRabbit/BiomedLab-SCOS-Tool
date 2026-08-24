@@ -34,8 +34,9 @@ PLOT_WINDOW_SEC = 10.0  # default visible x-range, adjustable in the UI
 PADDING = 8
 ITEM_SPACING = 6
 CAM_HEIGHT_RATIO = 0.28
-DEVICE_WIDTH_RATIO = 0.58
+DEVICE_WIDTH_RATIO = 0.53  # was 0.58 before the color bar — its width cost is split between this panel and the live image
 ROI_BTN_HEIGHT = 32
+COLORBAR_W = 54  # width of the intensity scale next to the live image
 
 
 HANDLE_RADIUS = 6
